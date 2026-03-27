@@ -11,6 +11,7 @@ from pathlib import Path
 from agents.base import BaseAgent, DATA_DIR
 from services.scraper import scrape_google_maps
 from services.email_finder import enrich_leads_with_emails
+from services.website_analyzer import enrich_leads_with_audits
 
 
 class ScoutAgent(BaseAgent):
@@ -41,6 +42,9 @@ class ScoutAgent(BaseAgent):
 
         # Enrich leads — find emails from websites
         leads = enrich_leads_with_emails(leads, log=self.log)
+
+        # Enrich leads — audit websites in parallel (cached into lead data for Pitch)
+        leads = enrich_leads_with_audits(leads, log=self.log)
 
         if not leads:
             # Check for cached data

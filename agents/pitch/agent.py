@@ -43,14 +43,18 @@ class PitchAgent(BaseAgent):
         owner = config.get("owner_name", "")
         niche = config.get("niche", "")
 
-        # Website audit
-        website = lead.get("website", "")
-        if website:
-            self.log(f"Web sitesi analiz ediliyor: {website}")
+        # Use pre-computed website audit from Scout (no extra HTTP call needed)
+        web_audit = lead.get("website_audit")
+        if web_audit:
+            self.log(f"Site analizi (Scout'tan): {web_audit.get('summary', '?')}")
+        elif lead.get("website"):
+            # Fallback: Scout didn't audit yet (e.g. cached lead) — do it now
+            self.log(f"Site analizi yapılıyor (Scout verisi yok): {lead['website']}")
+            web_audit = analyze_website(lead["website"])
+            self.log(f"Site analizi: {web_audit['summary']}")
         else:
             self.log("Web sitesi yok — teklife site kurulum önerisi eklenecek")
-        web_audit = analyze_website(website)
-        self.log(f"Site analizi: {web_audit['summary']}")
+            web_audit = {"exists": False, "issues": [], "strengths": [], "summary": "Web sitesi yok."}
 
         # Generate proposal text via Claude
         proposal = self._generate_proposal(agency, owner, niche, lead, web_audit)

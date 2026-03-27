@@ -2,7 +2,10 @@
 
 import re
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+
+MAX_WORKERS = 15  # parallel site audits
 
 TIMEOUT = 8
 
@@ -141,3 +144,45 @@ def analyze_website(url: str) -> dict:
         )
 
     return base
+
+
+def enrich_leads_with_audits(leads: list, log=None) -> list:
+    """
+    Audit all lead websites in parallel and store results in lead["website_audit"].
+    Only processes leads that have a website. Non-destructive for others.
+    Same pattern as enrich_leads_with_emails — single pass, fast.
+    """
+    to_audit = [l for l in leads if l.get("website")]
+    no_site = [l for l in leads if not l.get("website")]
+
+    # Mark no-website leads immediately
+    for lead in no_site:
+        lead["website_audit"] = {"exists": False, "issues": [], "strengths": [],
+                                  "summary": "Web sitesi yok."}
+
+    if not to_audit:
+        return leads
+
+    if log:
+        log(f"Web sitesi denetimi: {len(to_audit)} site paralel taranıyor...")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_to_lead = {
+            executor.submit(analyze_website, lead["website"]): lead
+            for lead in to_audit
+        }
+        issues_total = 0
+        for future in as_completed(future_to_lead):
+            lead = future_to_lead[future]
+            try:
+                audit = future.result()
+                lead["website_audit"] = audit
+                issues_total += len(audit.get("issues", []))
+            except Exception:
+                lead["website_audit"] = {"exists": False, "issues": [], "strengths": [],
+                                          "summary": "Analiz başarısız."}
+
+    if log:
+        log(f"Web denetimi tamamlandı: {len(to_audit)} sitede toplam {issues_total} eksiklik bulundu")
+
+    return leads
