@@ -4,9 +4,9 @@ import re
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-TIMEOUT = 5
-MAX_WORKERS = 10  # parallel site requests
-CONTACT_PATHS = ["/iletisim", "/contact", "/hakkimizda", "/about", "/bize-ulasin", "/"]
+TIMEOUT = 3
+MAX_WORKERS = 15  # parallel site requests
+CONTACT_PATHS = ["/iletisim", "/contact", "/"]
 
 SKIP_PREFIXES = ("noreply", "no-reply", "donotreply", "example", "test", "info@example",
                  "webmaster", "postmaster", "admin@example", "support@example")
