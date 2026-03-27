@@ -1,0 +1,10 @@
+.env
+.git
+__pycache__
+*.pyc
+*.pyo
+outputs/creatives/*
+data/leads/*
+data/campaigns/*
+data/proposals/*
+data/config/*
