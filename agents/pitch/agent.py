@@ -116,79 +116,238 @@ Profesyonel, samimi, somut ol. Gereksiz şeyler yazma."""
         if response:
             return response
 
-        # Fallback template
+        # Smart fallback template — category-aware
+        return self._build_template(agency, owner, lead_name, lead_category,
+                                    lead_rating, lead_reviews, lead_address)
+
+    def _build_template(self, agency, owner, lead_name, category, rating, reviews, address):
+        """Category-aware proposal template."""
         today = datetime.now().strftime("%d.%m.%Y")
+        cat = (category or "").lower()
+
+        # --- Category-specific content ---
+        if any(k in cat for k in ["restoran", "cafe", "bistro", "restaurant", "food", "yemek", "pizza", "burger"]):
+            pain_points = [
+                f"Google'da {reviews} yorumunuz var — büyük çoğunluğuna yanıt verilmemiş olabilir",
+                "Rezervasyon ve sipariş süreçleri muhtemelen telefon/WhatsApp ile yürütülüyor",
+                "Sosyal medya için düzenli içerik üretmek zaman alıyor",
+                "Müşteri geri bildirimlerini takip etmek için sistematik bir yapı yok",
+            ]
+            packages = [
+                ("Temel", "8.500 ₺/ay", [
+                    "Google yorum otomatik yanıtlama (24 saat içinde)",
+                    "Haftalık sosyal medya takvimi (3 paylaşım)",
+                    "Aylık performans raporu",
+                ]),
+                ("Profesyonel", "16.000 ₺/ay", [
+                    "Tüm Temel paket özellikleri",
+                    "WhatsApp otomatik rezervasyon hatırlatıcı",
+                    "Günlük sosyal medya yönetimi (7 paylaşım)",
+                    "Google ve Şikayetvar anlık izleme",
+                    "Aylık strateji toplantısı",
+                ]),
+                ("Tam Dijital", "28.000 ₺/ay", [
+                    "Tüm Profesyonel özellikler",
+                    "Menü QR sistemi + dijital sipariş",
+                    "Müşteri sadakat programı otomasyonu",
+                    "Özel dashboard + haftalık analiz",
+                    "CRM entegrasyonu",
+                ]),
+            ]
+            why = f"Restoran ve cafe sektöründe {reviews}+ yorumu olan işletmelerin dijital dönüşümünde uzmanız."
+            quick_win = "İlk 30 günde: tüm yanıtsız yorumlarınıza profesyonel yanıt + sosyal medya düzeni"
+
+        elif any(k in cat for k in ["klinik", "doktor", "sağlık", "diş", "hastane", "clinic", "health", "derm", "estetik"]):
+            pain_points = [
+                "Randevu hatırlatmaları manuel gönderiliyor, no-show oranı yüksek",
+                "Hasta kayıtları ve takibi zaman alıcı",
+                f"Google'da {reviews} yorum var — potansiyel hastalar burada karar veriyor",
+                "Yeni hasta kazanımı için dijital kanallar yeterince kullanılmıyor",
+            ]
+            packages = [
+                ("Temel", "9.500 ₺/ay", [
+                    "Otomatik randevu hatırlatma (SMS/WhatsApp)",
+                    "Google yorum yönetimi",
+                    "Aylık performans raporu",
+                ]),
+                ("Profesyonel", "18.000 ₺/ay", [
+                    "Tüm Temel paket özellikleri",
+                    "Online randevu formu entegrasyonu",
+                    "Hasta geri bildirim sistemi",
+                    "Sosyal medya yönetimi (5 paylaşım/hafta)",
+                    "No-show azaltma kampanyası",
+                ]),
+                ("Klinik Pro", "32.000 ₺/ay", [
+                    "Tüm Profesyonel özellikler",
+                    "Hasta CRM sistemi",
+                    "Tedavi sonrası otomatik takip",
+                    "Google Ads yönetimi",
+                    "7/24 teknik destek",
+                ]),
+            ]
+            why = "Sağlık sektörü dijital otomasyonunda gizlilik ve profesyonellik en önceliğimiz."
+            quick_win = "İlk 30 günde: randevu no-show oranını %40'a kadar düşürme garantisi"
+
+        elif any(k in cat for k in ["otel", "hotel", "pansiyon", "konaklama", "resort", "hostel"]):
+            pain_points = [
+                "Booking.com, Airbnb gibi platformlardaki yorumlara yanıt vermek zaman alıyor",
+                f"{reviews} Google yorumunuzun yönetimi sistematik değil",
+                "Misafir iletişimi check-in/out sürecinde yoğun",
+                "Tekrar eden sorular için otomatik yanıt sistemi yok",
+            ]
+            packages = [
+                ("Temel", "11.000 ₺/ay", [
+                    "Google + Booking yorum otomasyonu",
+                    "Misafir karşılama mesajı şablonları",
+                    "Aylık itibar raporu",
+                ]),
+                ("Profesyonel", "20.000 ₺/ay", [
+                    "Tüm Temel paket özellikleri",
+                    "WhatsApp check-in/check-out otomasyonu",
+                    "Sosyal medya yönetimi",
+                    "Sezon bazlı kampanya yönetimi",
+                    "Aylık strateji toplantısı",
+                ]),
+                ("Premium", "35.000 ₺/ay", [
+                    "Tüm Profesyonel özellikler",
+                    "Çoklu platform entegrasyonu (Booking, Airbnb, Expedia)",
+                    "Müşteri sadakat sistemi",
+                    "Dinamik fiyat takibi + öneri",
+                    "7/24 destek",
+                ]),
+            ]
+            why = "Konaklama sektöründe misafir deneyimi otomasyonu özel uzmanlık alanımız."
+            quick_win = "İlk 30 günde: tüm platformlardaki yanıtsız yorumlar yanıtlanır"
+
+        elif any(k in cat for k in ["güzellik", "kuaför", "berber", "tırnak", "nail", "beauty", "salon", "spa", "masaj"]):
+            pain_points = [
+                "Randevu yönetimi telefon/WhatsApp üzerinden yapılıyor",
+                "Müşteri hatırlatmaları manuel, zaman alıcı",
+                "Sosyal medya için düzenli içerik üretmek zor",
+                f"Google'da {reviews} yorum var ama tam kullanılmıyor",
+            ]
+            packages = [
+                ("Temel", "7.500 ₺/ay", [
+                    "Online randevu sistemi",
+                    "Otomatik randevu hatırlatma (WhatsApp)",
+                    "Google yorum yönetimi",
+                ]),
+                ("Profesyonel", "14.000 ₺/ay", [
+                    "Tüm Temel paket özellikleri",
+                    "Müşteri doğum günü kampanyaları",
+                    "Sosyal medya yönetimi (5 paylaşım/hafta)",
+                    "Sadakat programı otomasyonu",
+                ]),
+                ("Tam Paket", "24.000 ₺/ay", [
+                    "Tüm Profesyonel özellikler",
+                    "Hizmet öncesi/sonrası fotoğraf sistemi",
+                    "Google Ads yönetimi",
+                    "Müşteri geri bildirim sistemi",
+                    "7/24 teknik destek",
+                ]),
+            ]
+            why = "Güzellik ve bakım sektöründe müşteri sadakati otomasyonunda uzmanız."
+            quick_win = "İlk 30 günde: randevu no-show oranında %50 azalma"
+
+        else:
+            # Generic business
+            pain_points = [
+                f"Google'da {reviews} yorumunuz var — sistematik yönetim ile güçlü bir itibar oluşturulabilir",
+                "Tekrarlayan müşteri iletişimleri çalışan zamanının büyük bölümünü alıyor",
+                "Sosyal medya yönetimi düzensiz veya zaman yetersizliği nedeniyle aksıyor",
+                "Yeni müşteri kazanımı için dijital kanallar yeterince optimize edilmemiş",
+            ]
+            packages = [
+                ("Temel", "9.000 ₺/ay", [
+                    "Google yorum otomatik yanıtlama",
+                    "Sosyal medya yönetimi (haftalık 3 paylaşım)",
+                    "Aylık performans raporu",
+                ]),
+                ("Profesyonel", "17.000 ₺/ay", [
+                    "Tüm Temel paket özellikleri",
+                    "WhatsApp otomatik müşteri iletişimi",
+                    "Email kampanya yönetimi",
+                    "Rakip takip + itibar izleme",
+                    "Aylık strateji toplantısı",
+                ]),
+                ("Kurumsal", "30.000 ₺/ay", [
+                    "Tüm Profesyonel özellikler",
+                    "CRM entegrasyonu",
+                    "Özel otomasyon geliştirme",
+                    "Google/Meta Ads yönetimi",
+                    "7/24 teknik destek",
+                ]),
+            ]
+            why = f"{lead_name} büyüklüğündeki işletmeler için özelleştirilmiş otomasyon çözümleri sunuyoruz."
+            quick_win = "İlk 30 günde: en az 1 tam otomasyon canlıya alınır, sonuçlar ölçülür"
+
+        # Rating-based summary
+        if rating >= 4.5:
+            rep_comment = f"Google'da **{rating}/5** puanınız ve {reviews} yorumunuzla sektörün üst çeyreğindesiniz. Bu itibarı büyütmek ve korumak için sistem kuruyoruz."
+        elif rating >= 4.0:
+            rep_comment = f"**{rating}/5** puanınız sağlam bir başlangıç. Doğru otomasyon ile 4.8+ seviyesine çıkmak mümkün."
+        else:
+            rep_comment = f"**{rating}/5** puanınızı iyileştirmek için sistematik yorum yönetimi kritik öneme sahip."
+
+        # Build packages section
+        pkg_md = ""
+        for pname, price, features in packages:
+            pkg_md += f"\n### {pname} — {price}\n"
+            for f in features:
+                pkg_md += f"- {f}\n"
+
         return f"""# İş Teklifi
 
 **{agency}** → **{lead_name}**
-Tarih: {today}
+Tarih: {today} | Hazırlayan: {owner}
 
 ---
 
 ## Yönetici Özeti
 
-{lead_name} için otomasyon çözümleri sunuyoruz. Google'da {lead_rating}/5 puanınız ve {lead_reviews} yorumunuz var — bu güçlü bir temel. Otomasyonla müşteri deneyiminizi bir üst seviyeye çıkarabiliriz.
+{rep_comment}
+
+{agency} olarak {lead_name}'e özel otomasyon çözümleri sunuyoruz. Hedefimiz: sizi rekabette öne çıkarmak, tekrarlayan işlerden kurtarmak ve müşteri deneyiminizi sistematik hale getirmek.
 
 ---
 
-## Mevcut Durum
+## Mevcut Durum Analizi
 
-- Google yorumlarına yanıt süresi muhtemelen uzun veya hiç yanıt verilmiyor
-- Sosyal medya yönetimi manuel ve zaman alıcı
-- Müşteri takibi sistematik değil
-- Tekrarlayan işler çalışan zamanını yiyor
-
+{"".join(f"→ {p}" + chr(10) for p in pain_points)}
 ---
 
-## Çözüm Önerimiz
+## Çözüm Paketlerimiz
+{pkg_md}
+---
 
-### Paket 1: Başlangıç — $300/ay
-- Google yorum otomatik yanıtlama
-- Haftalık performans raporu
-- Email destek
+## Neden {agency}?
 
-### Paket 2: Profesyonel — $500/ay
-- Google yorum otomasyonu
-- Sosyal medya planlama (haftalık 5 paylaşım)
-- Aylık strateji toplantısı
-- Öncelikli destek
+{why}
 
-### Paket 3: Kurumsal — $1,000/ay
-- Tüm Pro özellikleri
-- WhatsApp müşteri desteği otomasyonu
-- Özel dashboard
-- CRM entegrasyonu
-- 7/24 destek
+- Kurulum sonrası 3 ay ücretsiz optimizasyon desteği
+- Her otomasyon için ölçülebilir hedef ve raporlama
+- **Pilot teklif:** İlk ay %50 indirimli başlayın, sonuçları görün
+
+**{quick_win}**
 
 ---
 
 ## Zaman Çizelgesi
 
-| Hafta | İş |
-|-------|-----|
-| 1 | Analiz + kurulum |
-| 2 | Otomasyon geliştirme |
-| 3 | Test + optimizasyon |
-| 4 | Canlıya alma + eğitim |
+| Hafta | Çalışma |
+|-------|---------|
+| 1 | Mevcut durum analizi + sistem kurulumu |
+| 2 | Otomasyonlar devreye alınıyor |
+| 3 | Test, optimizasyon, ince ayar |
+| 4 | Canlıya geçiş + ekip eğitimi |
 
 ---
 
-## Neden {agency}?
+## Sonraki Adım
 
-- {lead_category} sektöründe uzmanlaşmış otomasyon çözümleri
-- Kurulum + sürekli bakım tek elde
-- Sonuç odaklı: ölçülebilir metriklerle çalışıyoruz
+**15 dakikalık ücretsiz demo görüşmesi** için bugün iletişime geçin.
 
----
-
-## Sonraki Adımlar
-
-1. 15 dakikalık demo görüşmesi
-2. İhtiyaç analizi
-3. Pilot uygulama (1 otomasyon)
-4. Tam geçiş
-
-İletişim: {owner} — {agency}
+📧 {owner} | {agency}
 """
 
     def _load_hot_leads(self):

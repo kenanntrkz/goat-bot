@@ -57,7 +57,23 @@ class BaseAgent:
         return {}
 
     def call_claude(self, prompt: str, timeout: int = 120):
-        """Call Claude CLI if available. Returns response text or None."""
+        """Call Claude via Anthropic SDK (preferred) or CLI. Returns text or None."""
+        # 1. Try Anthropic SDK (no CLI needed)
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                msg = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return msg.content[0].text
+            except Exception:
+                pass
+
+        # 2. Fall back to CLI
         try:
             result = subprocess.run(
                 ["claude", "-p", prompt, "--output-format", "text"],
