@@ -1,7 +1,7 @@
 """Outreach — Email Campaign Agent
 
-Creates cold email campaigns via Instantly.ai.
-Reads qualified leads, generates email sequences, launches campaigns.
+Creates cold email campaigns via Turkoz Outreach (outreach.kenanturkoz.cloud).
+Reads qualified leads, generates email sequences, imports to outreach system.
 """
 
 import json
@@ -9,43 +9,43 @@ from datetime import datetime
 from pathlib import Path
 
 from agents.base import BaseAgent, DATA_DIR
-from services.email import (
+from services.outreach import (
     get_api_key, test_connection, create_campaign,
-    add_leads_to_campaign, activate_campaign, list_campaigns,
+    import_leads, list_campaigns,
 )
 
 
 class OutreachAgent(BaseAgent):
     agent_id = "outreach"
     name = "Outreach"
-    role = "Email warmup + cold campaigns via Instantly.ai"
+    role = "Cold email campaigns via Turkoz Outreach"
     category = "sales"
 
     def run(self, auto_activate=False) -> dict:
         config = self.load_config()
-        api_key = config.get("instantly_api_key") or get_api_key()
+        api_key = config.get("outreach_api_key") or get_api_key()
 
         # Check API key
         if not api_key:
             return {
                 "status": "needs_key",
-                "summary": "Instantly.ai API anahtarı gerekli. Henüz ayarlanmamış.",
+                "summary": "Outreach API anahtarı gerekli. Henüz ayarlanmamış.",
                 "metrics": {},
                 "recommendations": [
-                    "Instantly.ai hesabı aç: https://instantly.ai",
-                    "API anahtarını al: Settings → Integrations → API",
-                    "goat'ye ekle: ayarlardan veya .env dosyasından",
+                    "outreach.kenanturkoz.cloud sistemini aç",
+                    "OUTREACH_API_KEY'i .env dosyasına ekle",
+                    "goat dashboard'undan API anahtarını ayarla",
                 ],
             }
 
         # Test connection
-        self.log("Instantly.ai bağlantısı test ediliyor...")
+        self.log("Outreach sistemi test ediliyor...")
         if not test_connection(api_key):
             return {
                 "status": "error",
-                "summary": "Instantly.ai bağlantısı başarısız. API anahtarını kontrol et.",
+                "summary": "Outreach sistemine bağlanılamadı. API anahtarını kontrol et.",
                 "metrics": {},
-                "recommendations": ["API anahtarının doğru olduğundan emin ol"],
+                "recommendations": ["OUTREACH_API_KEY ve OUTREACH_URL değerlerini kontrol et"],
             }
         self.log("Bağlantı başarılı.")
 
@@ -77,62 +77,77 @@ class OutreachAgent(BaseAgent):
         niche = config.get("niche", "işletme")
         sequence = self._generate_sequence(agency_name, owner_name, niche)
 
-        # Create campaign
+        # Use first email as campaign template
+        first_email = sequence[0] if sequence else {
+            "subject": f"{niche} için otomasyon önerisi",
+            "body": f"Merhaba,\n\n{agency_name} olarak sizinle iletişime geçmek istedim.\n\nSaygılarımla,\n{owner_name}",
+        }
+
+        # Create campaign in outreach system
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
         campaign_name = f"goat_{niche}_{timestamp}"
         self.log(f"Kampanya oluşturuluyor: {campaign_name}")
 
-        campaign_id = create_campaign(campaign_name, api_key)
+        campaign_id = create_campaign(
+            name=campaign_name,
+            subject_template=first_email.get("subject", ""),
+            body_template=first_email.get("body", ""),
+        )
         if not campaign_id:
             return {
                 "status": "error",
-                "summary": "Kampanya oluşturulamadı. Instantly.ai API'sini kontrol et.",
+                "summary": "Kampanya oluşturulamadı. Outreach sistemini kontrol et.",
                 "metrics": {},
-                "recommendations": ["Instantly.ai hesabında email hesabı bağlı mı kontrol et"],
+                "recommendations": ["outreach.kenanturkoz.cloud adresine gidip durumu kontrol et"],
             }
 
         self.log(f"Kampanya oluşturuldu: {campaign_id}")
 
-        # Add leads
-        instantly_leads = []
+        # Convert and import leads
+        outreach_leads = []
         for l in email_leads:
             lead = l.get("lead", {})
-            instantly_leads.append({
+            name_parts = (lead.get("name", "") or "").split(maxsplit=1)
+            outreach_leads.append({
                 "email": lead["email"],
-                "first_name": lead.get("name", "").split()[0] if lead.get("name") else "",
-                "company_name": lead.get("name", ""),
-                "custom_variables": {
-                    "business_type": lead.get("category", niche),
-                    "city": lead.get("location", ""),
-                    "rating": str(lead.get("rating", "")),
-                },
+                "first_name": name_parts[0] if name_parts else "",
+                "last_name": name_parts[1] if len(name_parts) > 1 else "",
+                "company": lead.get("name", ""),
+                "sector": lead.get("category", niche),
+                "phone": lead.get("phone", ""),
+                "website": lead.get("website", ""),
+                "country": "TR",
+                "source": "goat-scout",
+                "notes": f"Rating: {lead.get('rating', '')} | City: {lead.get('location', '')}",
             })
 
-        success = add_leads_to_campaign(campaign_id, instantly_leads, api_key)
-        if not success:
+        imported = import_leads(outreach_leads)
+        if imported is None:
             self.log("Lead'ler eklenemedi.")
+            imported = 0
+        else:
+            self.log(f"{imported} lead sisteme eklendi.")
 
-        self.log(f"{len(instantly_leads)} lead kampanyaya eklendi.")
-
-        # Save campaign data
+        # Save campaign data locally
         campaign_data = {
             "campaign_id": campaign_id,
             "campaign_name": campaign_name,
             "created_at": datetime.now().isoformat(),
             "status": "draft",
-            "leads_count": len(instantly_leads),
+            "leads_count": len(outreach_leads),
             "sequence": sequence,
-            "leads": instantly_leads,
+            "leads": outreach_leads,
+            "outreach_url": f"https://outreach.kenanturkoz.cloud",
         }
         self.save_data(f"campaigns/{campaign_id}.json", campaign_data)
 
         results = {
             "status": "ok",
-            "summary": f"Kampanya hazır: {len(instantly_leads)} lead eklendi. Instantly.ai'dan aktifleştir.",
+            "summary": f"Kampanya hazır: {imported} lead eklendi. outreach.kenanturkoz.cloud'dan yönet.",
             "metrics": {
                 "campaign_id": campaign_id,
                 "campaign_name": campaign_name,
-                "leads_added": len(instantly_leads),
+                "leads_imported": imported,
                 "total_hot": len(leads),
                 "with_email": len(email_leads),
                 "sequence_steps": len(sequence),
@@ -140,10 +155,10 @@ class OutreachAgent(BaseAgent):
             },
             "sequence": sequence,
             "recommendations": [
-                "Instantly.ai dashboard'undan email hesabını bağla",
-                "Email sequence'i kontrol et ve düzenle",
-                "Warmup'ın tamamlandığından emin ol",
-                "Kampanyayı Instantly.ai'dan aktifleştir",
+                "outreach.kenanturkoz.cloud adresinden kampanyayı görüntüle",
+                f"Kampanya adı: {campaign_name}",
+                "Email sequence 3 adımlı — lokal dosyada kayıtlı",
+                "n8n workflow'dan kampanyayı aktifleştir",
             ],
         }
 
@@ -165,7 +180,6 @@ class OutreachAgent(BaseAgent):
 
     def _generate_sequence(self, agency_name, owner_name, niche):
         """Generate a 3-step email sequence. Uses Claude if available, otherwise templates."""
-        # Try Claude for personalized sequence
         prompt = f"""Bir otomasyon ajansı için 3 adımlı soğuk email dizisi yaz.
 
 Ajans: {agency_name}
@@ -183,7 +197,6 @@ JSON formatında dön:
         response = self.call_claude(prompt, timeout=30)
         if response:
             try:
-                # Try to extract JSON from response
                 import re
                 json_match = re.search(r'\[.*\]', response, re.DOTALL)
                 if json_match:
@@ -199,7 +212,7 @@ JSON formatında dön:
                 "delay_days": 0,
                 "subject": f"{niche} işletmeniz için otomasyon önerisi",
                 "body": f"Merhaba {{{{first_name}}}},\n\n"
-                        f"{{{{company_name}}}} işletmenizi inceledim. Google yorumlarınıza henüz otomatik yanıt verilmediğini fark ettim.\n\n"
+                        f"{{{{company}}}} işletmenizi inceledim. Google yorumlarınıza henüz otomatik yanıt verilmediğini fark ettim.\n\n"
                         f"Biz {agency_name} olarak {niche} işletmeleri için otomasyon çözümleri kuruyoruz. "
                         f"Müşterilerinize 5 dakika içinde profesyonel yanıt göndermek ister misiniz?\n\n"
                         f"15 dakikalık bir demo için müsait misiniz?\n\n"
