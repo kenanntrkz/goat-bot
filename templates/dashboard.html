@@ -1,0 +1,2301 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>goat — ajansını kur</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #08080b;
+  --surface: #0e0e13;
+  --border: #1a1a24;
+  --text: #ededf0;
+  --dim: #8a8a9c;
+  --faint: #3a3a4a;
+  --accent: #e85d26;
+  --accent2: #ff7a45;
+  --green: #34d399;
+  --yellow: #fbbf24;
+  --blue: #60a5fa;
+  --red: #f87171;
+  --purple: #a78bfa;
+  --glow-accent: rgba(232, 93, 38, 0.4);
+  --glow-green: rgba(52, 211, 153, 0.35);
+  --glow-blue: rgba(96, 165, 250, 0.3);
+  --glow-purple: rgba(167, 139, 250, 0.3);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--dim);
+  font-family: 'Space Mono', monospace;
+  font-size: 15px;
+  line-height: 1.9;
+  overflow: hidden;
+}
+
+/* Ambient background gradient */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(232,93,38,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(96,165,250,0.03) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, rgba(52,211,153,0.02) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════
+   BOOT SEQUENCE OVERLAY
+   ═══════════════════════════════════════════ */
+#bootOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #030305;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: 'IBM Plex Mono', 'Space Mono', monospace;
+  transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#bootOverlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(232,93,38,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+#bootOverlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+#bootOverlay.hidden { display: none; }
+
+#bootContent {
+  width: min(640px, 90vw);
+  padding: 32px;
+}
+.boot-line {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--dim);
+  opacity: 0;
+  transform: translateY(2px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.boot-line.show {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.boot-line.accent { color: var(--accent); text-shadow: 0 0 20px var(--glow-accent); }
+.boot-line.green { color: var(--green); text-shadow: 0 0 12px var(--glow-green); }
+.boot-line.bright { color: var(--text); }
+.boot-line.header {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-shadow: 0 0 30px var(--glow-accent), 0 0 60px rgba(232,93,38,0.15);
+  margin: 12px 0 4px;
+}
+
+#bootBar {
+  width: 100%;
+  height: 2px;
+  background: var(--faint);
+  margin-top: 20px;
+  border-radius: 1px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#bootBar.show { opacity: 1; }
+#bootBarFill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  box-shadow: 0 0 12px var(--glow-accent);
+  border-radius: 1px;
+  transition: width 0.1s linear;
+}
+
+/* ═══════════════════════════════════════════
+   CRT OVERLAY
+   ═══════════════════════════════════════════ */
+.crt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+/* Scanlines */
+.crt-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+  animation: scanlineShift 8s linear infinite;
+}
+/* Vignette */
+.crt-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+}
+
+@keyframes scanlineShift {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+/* Occasional subtle screen flicker */
+@keyframes crtFlicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.97; }
+  98% { opacity: 1; }
+  99% { opacity: 0.985; }
+}
+.world { animation: crtFlicker 6s ease-in-out infinite; }
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+   ═══════════════════════════════════════════ */
+.world {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.bottom-row {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ─── Left: Narrative / Log ─── */
+.narrative {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+.narrative-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: relative;
+}
+/* Subtle glow line under header */
+.narrative-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.25;
+}
+
+.narrative-header .title {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: 3px;
+  text-shadow: 0 0 20px var(--glow-accent), 0 0 40px rgba(232,93,38,0.15);
+  text-transform: uppercase;
+}
+.narrative-header .sub {
+  font-size: 11px;
+  color: var(--dim);
+  flex: 1;
+  text-align: right;
+  margin-right: 12px;
+}
+#headerClock {
+  font-size: 10px;
+  color: var(--faint);
+  letter-spacing: 1px;
+  margin-right: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 300;
+}
+.workspace-btn {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  margin-right: 8px;
+  background: rgba(232,93,38,0.06);
+}
+.workspace-btn:hover {
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--glow-accent), 0 0 40px rgba(232,93,38,0.15);
+}
+.reset-btn {
+  font-size: 11px;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 5px 10px;
+  border: 1px solid var(--faint);
+  border-radius: 4px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+.reset-btn:hover {
+  color: var(--red);
+  border-color: var(--red);
+  background: rgba(248,113,113,0.08);
+  box-shadow: 0 0 12px rgba(248,113,113,0.15);
+}
+
+.log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+.log-line {
+  opacity: 0;
+  margin-bottom: 4px;
+}
+.log-line.typed {
+  opacity: 1;
+}
+.log-line.fade-in {
+  animation: fadeIn 0.8s ease forwards;
+}
+.log-line.bright { color: var(--text); font-weight: 400; }
+.log-line.accent { color: var(--accent2); text-shadow: 0 0 10px var(--glow-accent); }
+.log-line.green { color: var(--green); text-shadow: 0 0 8px var(--glow-green); }
+.log-line.yellow { color: var(--yellow); text-shadow: 0 0 8px rgba(251,191,36,0.3); }
+.log-line.blue { color: var(--blue); text-shadow: 0 0 8px var(--glow-blue); }
+.log-line.red { color: var(--red); text-shadow: 0 0 8px rgba(248,113,113,0.3); }
+.log-line.dim { color: var(--dim); }
+.log-line.faint { color: var(--faint); }
+.log-line.indent { padding-left: 24px; }
+.log-line.space { margin-top: 14px; }
+.log-line.large { font-size: 16px; font-weight: 700; color: var(--text); text-shadow: 0 0 12px var(--glow-accent); }
+
+/* Typing cursor for active line */
+.log-line .type-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  animation: cursorBlink 0.6s step-end infinite;
+}
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Actions in log */
+.log-action {
+  display: inline-block;
+  color: var(--accent2);
+  cursor: pointer;
+  border-bottom: 1px dashed var(--accent2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 8px 0;
+  font-size: 14px;
+  opacity: 0;
+  animation: fadeIn 0.8s ease forwards;
+  padding: 4px 12px 4px 0;
+  border-radius: 2px;
+}
+.log-action:hover:not(.used) {
+  color: #ffa070;
+  border-color: #ffa070;
+  text-shadow: 0 0 14px var(--glow-accent);
+  background: rgba(232,93,38,0.06);
+  padding-left: 6px;
+}
+.log-action.used {
+  color: var(--faint);
+  border-color: transparent;
+  cursor: default;
+  text-decoration: line-through;
+  text-shadow: none;
+}
+
+/* Input area */
+.input-area {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  position: relative;
+}
+.input-area::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.15;
+}
+.input-area input {
+  flex: 1;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  padding: 10px 4px;
+  border: none;
+  border-bottom: 1px solid var(--faint);
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  caret-color: var(--accent);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-area input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 2px 16px -4px var(--glow-accent);
+}
+.input-area input::placeholder { color: var(--faint); }
+.input-area .prompt {
+  color: var(--accent);
+  padding: 8px 0;
+  flex-shrink: 0;
+  text-shadow: 0 0 10px var(--glow-accent);
+  animation: promptPulse 3s ease-in-out infinite;
+}
+@keyframes promptPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ─── Right: Stats Panel ─── */
+.stats-panel {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--surface) 0%, #0a0a0f 100%);
+  border-left: 1px solid var(--border);
+  position: relative;
+}
+/* Accent glow on left edge */
+.stats-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent 10%, var(--accent) 50%, transparent 90%);
+  opacity: 0.35;
+  animation: glowPulseLine 4s ease-in-out infinite;
+}
+@keyframes glowPulseLine {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.45; }
+}
+
+.stat-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  animation: fadeIn 1s ease forwards;
+}
+.stat-section.hidden { display: none; }
+.stat-label {
+  font-size: 9px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  margin-bottom: 10px;
+  text-shadow: 0 0 10px var(--glow-accent);
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(232,93,38,0.12);
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+.stat-row .k { color: var(--dim); font-size: 13px; }
+.stat-row .v { color: var(--text); font-weight: 700; font-size: 14px; }
+.stat-row .v.accent { color: var(--accent); text-shadow: 0 0 8px var(--glow-accent); }
+.stat-row .v.green { color: var(--green); text-shadow: 0 0 8px var(--glow-green); }
+.stat-row .v.yellow { color: var(--yellow); text-shadow: 0 0 8px rgba(251,191,36,0.3); }
+.stat-row .v.blue { color: var(--blue); text-shadow: 0 0 8px var(--glow-blue); }
+.stat-row .v.red { color: var(--red); }
+
+/* Bar visualization */
+.stat-bar {
+  height: 4px;
+  background: rgba(58,58,72,0.4);
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.stat-bar-fill.accent { background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 10px var(--glow-accent); }
+.stat-bar-fill.green { background: linear-gradient(90deg, #22c088, var(--green)); box-shadow: 0 0 10px var(--glow-green); }
+.stat-bar-fill.yellow { background: linear-gradient(90deg, #e5a820, var(--yellow)); }
+.stat-bar-fill.blue { background: linear-gradient(90deg, #4488ee, var(--blue)); }
+
+/* Agent list in stats */
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  transition: all 0.3s;
+}
+.agent-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.agent-dot.on {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--glow-green), 0 0 12px var(--glow-green);
+  animation: agentPulse 2.5s ease-in-out infinite;
+}
+.agent-dot.soon { background: var(--yellow); }
+.agent-label { font-size: 13px; color: var(--dim); transition: color 0.3s, text-shadow 0.3s; }
+.agent-label.on { color: var(--text); text-shadow: 0 0 8px rgba(255,255,255,0.1); }
+
+@keyframes agentPulse {
+  0%, 100% { box-shadow: 0 0 4px var(--glow-green); }
+  50% { box-shadow: 0 0 8px var(--glow-green), 0 0 16px rgba(52,211,153,0.15); }
+}
+
+/* Bot in stats panel */
+.bot-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ─── Bot ─── */
+.bot {
+  position: relative;
+  width: 56px;
+  height: 68px;
+  margin-bottom: 8px;
+}
+
+.bot .head {
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  width: 36px; height: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px 6px 4px 4px;
+  animation: botFloat 3.5s ease-in-out infinite;
+  overflow: hidden;
+}
+.bot .visor {
+  position: absolute;
+  top: 4px; left: 3px; right: 3px;
+  height: 16px;
+  background: var(--bg);
+  border-radius: 3px;
+  border: 1px solid var(--faint);
+  overflow: hidden;
+}
+.bot .visor::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(232,93,38,0.12) 0%, transparent 70%);
+}
+.bot .eyes {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  display: flex; gap: 8px;
+}
+.bot .eye {
+  width: 4px; height: 5px;
+  background: var(--accent);
+  border-radius: 1px;
+  box-shadow: 0 0 8px var(--glow-accent), 0 0 16px rgba(232,93,38,0.2);
+  animation: eyeGlow 3s ease-in-out infinite;
+}
+.bot .scanline {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232,93,38,0.3), transparent);
+  animation: scanDown 3s linear infinite;
+}
+.bot .antenna {
+  position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 1px; height: 6px;
+  background: var(--faint);
+}
+.bot .antenna::after {
+  content: '';
+  position: absolute; top: -3px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--glow-accent), 0 0 12px rgba(232,93,38,0.3);
+  animation: antPulse 1.5s ease infinite;
+}
+.bot .neck {
+  position: absolute; top: 30px; left: 50%;
+  transform: translateX(-50%);
+  width: 8px; height: 4px;
+  background: var(--faint);
+}
+.bot .body {
+  position: absolute; top: 33px; left: 50%;
+  transform: translateX(-50%);
+  width: 28px; height: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px 4px 6px 6px;
+}
+.bot .chest {
+  position: absolute; top: 3px; left: 50%;
+  transform: translateX(-50%);
+  width: 12px; height: 8px;
+  background: var(--bg);
+  border-radius: 2px;
+  border: 1px solid var(--faint);
+  overflow: hidden;
+}
+.bot .chest-bars {
+  display: flex; align-items: flex-end;
+  gap: 1px; height: 100%; padding: 1px;
+}
+.bot .chest-bars span {
+  flex: 1; background: var(--accent);
+  border-radius: 0; opacity: 0.5;
+  animation: barPulse 1.8s ease-in-out infinite;
+}
+.bot .chest-bars span:nth-child(1){height:40%;animation-delay:0s}
+.bot .chest-bars span:nth-child(2){height:70%;animation-delay:.2s}
+.bot .chest-bars span:nth-child(3){height:50%;animation-delay:.4s}
+.bot .chest-bars span:nth-child(4){height:90%;animation-delay:.1s}
+.bot .arm {
+  position: absolute; top: 34px;
+  width: 2px; height: 14px;
+  background: var(--faint);
+  border-radius: 1px;
+  transform-origin: top center;
+}
+.bot .arm.l { left: 8px; transform: rotate(8deg); }
+.bot .arm.r { right: 8px; transform: rotate(-8deg); }
+.bot .arm::after {
+  content: '';
+  position: absolute; bottom: -2px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px;
+  background: var(--surface);
+  border: 1px solid rgba(232,93,38,0.4);
+  border-radius: 50%;
+}
+.bot .glow {
+  position: absolute; bottom: -2px; left: 50%;
+  transform: translateX(-50%);
+  width: 36px; height: 4px;
+  background: radial-gradient(ellipse, rgba(232,93,38,0.12) 0%, transparent 70%);
+  animation: glowPulse 3.5s ease-in-out infinite;
+}
+.bot-status {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 1px;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.bot-status.on { color: var(--accent); text-shadow: 0 0 12px var(--glow-accent); }
+
+@keyframes botFloat { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-2px)} }
+@keyframes eyeGlow { 0%,100%{box-shadow:0 0 8px var(--glow-accent)} 50%{box-shadow:0 0 14px var(--glow-accent), 0 0 24px rgba(232,93,38,0.2)} }
+@keyframes scanDown { 0%{top:-2px;opacity:0} 10%{opacity:.6} 90%{opacity:.6} 100%{top:100%;opacity:0} }
+@keyframes antPulse { 0%,100%{opacity:1;box-shadow:0 0 6px var(--glow-accent)} 50%{opacity:.3;box-shadow:0 0 2px var(--glow-accent)} }
+@keyframes barPulse { 0%,100%{opacity:.3} 50%{opacity:.8} }
+@keyframes glowPulse { 0%,100%{opacity:.5} 50%{opacity:.2} }
+
+/* Bot states */
+.bot.think .eye { animation: thinkFlicker .3s ease infinite; }
+.bot.think .scanline { animation: scanDown .5s linear infinite; }
+.bot.think .chest-bars span { animation: barFast .3s ease-in-out infinite; }
+.bot.think .head { border-color: var(--accent); }
+@keyframes thinkFlicker { 0%,100%{opacity:1} 50%{opacity:.1} }
+@keyframes barFast { 0%,100%{opacity:.2;height:20%} 50%{opacity:1;height:100%} }
+
+.bot.success .eye { background: var(--green); box-shadow: 0 0 10px var(--glow-green), 0 0 20px rgba(52,211,153,0.2); }
+.bot.success .chest-bars span { background: var(--green); }
+.bot.success .antenna::after { background: var(--green); box-shadow: 0 0 8px var(--glow-green); }
+.bot.success .head { animation: botJump .5s ease 1; border-color: var(--green); }
+@keyframes botJump { 0%,100%{transform:translateX(-50%) translateY(0)} 35%{transform:translateX(-50%) translateY(-8px)} }
+
+.bot.wave .arm.r { animation: botWave .5s ease-in-out 3; }
+@keyframes botWave { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(-40deg)} }
+
+/* ─── Checklist ─── */
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--dim);
+  transition: color 0.4s, text-shadow 0.4s;
+}
+.check-item.done { color: var(--green); text-shadow: 0 0 6px var(--glow-green); }
+.check-item.done .chk { color: var(--green); }
+.check-item .chk {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ─── Pixel Office ─── */
+.office-wrap {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: #06060a;
+  position: relative;
+  overflow: hidden;
+  height: 200px;
+}
+/* Ambient glow at bottom of office */
+.office-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to top, rgba(232,93,38,0.05), transparent);
+  pointer-events: none;
+}
+.office-canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.office-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 9px;
+  color: var(--faint);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.office-sign {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 9px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transition: opacity 1s;
+}
+.office-sign.show { opacity: 1; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--faint); }
+
+/* ─── Ambient Noise Texture ─── */
+.world::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 99;
+}
+</style>
+</head>
+<body>
+
+<!-- Boot Sequence Overlay -->
+<div id="bootOverlay">
+  <div id="bootContent"></div>
+  <div id="bootBar"><div id="bootBarFill"></div></div>
+</div>
+
+<!-- CRT Overlay -->
+<div class="crt-overlay"></div>
+
+<div class="world" id="mainWorld" style="opacity: 0;">
+  <div class="office-wrap" id="officeWrap">
+    <div class="office-label">// ofis</div>
+    <div class="office-sign" id="officeSign"></div>
+    <canvas class="office-canvas" id="officeCanvas"></canvas>
+  </div>
+  <div class="bottom-row">
+  <div class="narrative">
+    <div class="narrative-header">
+      <span class="title">goat</span>
+      <span id="headerClock"></span>
+      <span class="sub" id="headerSub"></span>
+      <span class="reset-btn" onclick="fullReset()" title="sıfırla">↺ sıfırla</span>
+    </div>
+    <div class="log" id="log"></div>
+    <div class="input-area">
+      <span class="prompt">&gt;</span>
+      <input type="text" id="input" placeholder="" onkeydown="if(event.key==='Enter')handleInput()" autofocus>
+    </div>
+  </div>
+
+  <div class="stats-panel" id="statsPanel">
+    <div class="bot-container">
+      <div class="bot wave" id="bot">
+        <div class="antenna"></div>
+        <div class="head">
+          <div class="visor"><div class="scanline"></div><div class="eyes"><div class="eye"></div><div class="eye"></div></div></div>
+        </div>
+        <div class="neck"></div>
+        <div class="body"><div class="chest"><div class="chest-bars"><span></span><span></span><span></span><span></span></div></div></div>
+        <div class="arm l"></div><div class="arm r"></div>
+        <div class="glow"></div>
+      </div>
+      <div class="bot-status" id="botStatus">beklemede</div>
+    </div>
+
+    <div class="stat-section" id="secChecklist">
+      <div class="stat-label">kontrol listesi</div>
+      <div class="check-item" id="chkSetup"><span class="chk">○</span> ajans kurulumu</div>
+      <div class="check-item" id="chkApify"><span class="chk">○</span> apify token</div>
+      <div class="check-item" id="chkScout"><span class="chk">○</span> lead taraması</div>
+      <div class="check-item" id="chkFilter"><span class="chk">○</span> lead puanlama</div>
+      <div class="check-item" id="chkInstantly"><span class="chk">○</span> instantly.ai</div>
+      <div class="check-item" id="chkFal"><span class="chk">○</span> fal.ai</div>
+      <div class="check-item" id="chkOutreach"><span class="chk">○</span> ilk kampanya</div>
+      <div class="check-item" id="chkPitch"><span class="chk">○</span> ilk teklif</div>
+    </div>
+
+    <div class="stat-section hidden" id="secAgency">
+      <div class="stat-label">ajans</div>
+      <div class="stat-row"><span class="k">isim</span><span class="v" id="sName">—</span></div>
+      <div class="stat-row"><span class="k">niş</span><span class="v" id="sNiche">—</span></div>
+      <div class="stat-row"><span class="k">şehirler</span><span class="v" id="sCities">—</span></div>
+    </div>
+
+    <div class="stat-section hidden" id="secLeads">
+      <div class="stat-label">müşteri adayları</div>
+      <div class="stat-row"><span class="k">bulunan</span><span class="v" id="sFound">0</span></div>
+      <div class="stat-row"><span class="k">sıcak</span><span class="v accent" id="sHot">0</span></div>
+      <div class="stat-row"><span class="k">ılık</span><span class="v yellow" id="sWarm">0</span></div>
+      <div class="stat-row"><span class="k">soğuk</span><span class="v blue" id="sCold">0</span></div>
+      <div class="stat-bar"><div class="stat-bar-fill accent" id="barHot" style="width:0%"></div></div>
+    </div>
+
+    <div class="stat-section hidden" id="secAgents">
+      <div class="stat-label">ajanlar</div>
+      {% for aid, ag in agents.items() %}
+      <div class="agent-row">
+        <div class="agent-dot {% if aid in ['outreach','pitch'] %}soon{% endif %}" id="d-{{ aid }}"></div>
+        <span class="agent-label" id="al-{{ aid }}">{{ ag.name }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="stat-section hidden" id="secPipeline">
+      <div class="stat-label">süreç</div>
+      <div class="stat-row"><span class="k">aşama</span><span class="v green" id="sStage">—</span></div>
+      <div class="stat-row"><span class="k">son çalışma</span><span class="v" id="sLastRun">hiç</span></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- Setup Modal (hidden, triggered from narrative) -->
+<div style="display:none" id="setupModal">
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;justify-content:center;align-items:center;backdrop-filter:blur(4px);">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px;width:400px;font-family:'Space Mono',monospace;color:var(--text);box-shadow:0 0 60px rgba(232,93,38,0.08);">
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">ajansını kur</div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:20px;">goat'ye kendini tanıt.</div>
+      <div style="margin-bottom:12px;"><div style="font-size:10px;color:var(--dim);margin-bottom:3px;">AJANS ADI</div><input id="cfg-name" placeholder="örn. AI Otomasyon Ajansı" style="width:100%;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--faint);border-radius:4px;background:var(--bg);color:var(--text);outline:none;"></div>
+      <div style="margin-bottom:12px;"><div style="font-size:10px;color:var(--dim);margin-bottom:3px;">SENIN ADIN</div><input id="cfg-owner" placeholder="örn. Ali" style="width:100%;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--faint);border-radius:4px;background:var(--bg);color:var(--text);outline:none;"></div>
+      <div style="margin-bottom:12px;"><div style="font-size:10px;color:var(--dim);margin-bottom:3px;">NİŞ / SEKTÖR</div><input id="cfg-niche" placeholder="örn. restoranlar" style="width:100%;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--faint);border-radius:4px;background:var(--bg);color:var(--text);outline:none;"></div>
+      <div style="margin-bottom:12px;"><div style="font-size:10px;color:var(--dim);margin-bottom:3px;">HEDEF ŞEHİRLER</div><input id="cfg-cities" placeholder="örn. Istanbul, Ankara" style="width:100%;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--faint);border-radius:4px;background:var(--bg);color:var(--text);outline:none;"></div>
+      <div style="margin-bottom:16px;"><div style="font-size:10px;color:var(--dim);margin-bottom:3px;">APIFY TOKEN <span style="color:var(--faint)">(opsiyonel)</span></div><input id="cfg-apify" type="password" placeholder="apify_api_..." style="width:100%;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--faint);border-radius:4px;background:var(--bg);color:var(--text);outline:none;"></div>
+      <button onclick="saveSetup()" style="width:100%;font-family:inherit;font-size:12px;font-weight:700;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;letter-spacing:0.5px;box-shadow:0 0 20px var(--glow-accent);transition:all 0.3s;">KAYDET</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════
+const BOOT_LINES = [
+  { text: 'POST... OK', cls: '', delay: 80 },
+  { text: 'MEM 1048576K ... OK', cls: '', delay: 60 },
+  { text: 'KERNEL v4.2.1-goat yükleniyor', cls: '', delay: 90 },
+  { text: '', cls: '', delay: 40 },
+  { text: '   ██████╗  ██████╗  █████╗ ████████╗', cls: 'header', delay: 50 },
+  { text: '  ██╔════╝ ██╔═══██╗██╔══██╗╚══██╔══╝', cls: 'header', delay: 50 },
+  { text: '  ██║  ███╗██║   ██║███████║   ██║   ', cls: 'header', delay: 50 },
+  { text: '  ██║   ██║██║   ██║██╔══██║   ██║   ', cls: 'header', delay: 50 },
+  { text: '  ╚██████╔╝╚██████╔╝██║  ██║   ██║   ', cls: 'header', delay: 50 },
+  { text: '   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ', cls: 'header', delay: 50 },
+  { text: '', cls: '', delay: 100 },
+  { text: 'AJANS KOMUTA MERKEZİ :: HAZIR', cls: 'accent', delay: 120 },
+  { text: '', cls: '', delay: 60 },
+  { text: 'Ajan alt sistemi başlatılıyor...', cls: '', delay: 80 },
+  { text: '  [OK] goat     — ana orkestratör', cls: 'green', delay: 55 },
+  { text: '  [OK] scout    — müşteri bulucu', cls: 'green', delay: 55 },
+  { text: '  [OK] filter   — lead puanlayıcı', cls: 'green', delay: 55 },
+  { text: '  [OK] pitch    — teklif motoru', cls: 'green', delay: 55 },
+  { text: '  [OK] outreach — kampanya yöneticisi', cls: 'green', delay: 55 },
+  { text: '  [OK] mentor   — bilgi bankası', cls: 'green', delay: 55 },
+  { text: '', cls: '', delay: 60 },
+  { text: 'Servisler yükleniyor...', cls: '', delay: 80 },
+  { text: '  Apify tarayıcı ....... HAZIR', cls: '', delay: 70 },
+  { text: '  fal.ai görsel ........ HAZIR', cls: '', delay: 70 },
+  { text: '  Instantly.ai email ... BEKLEMEDE', cls: '', delay: 70 },
+  { text: '', cls: '', delay: 60 },
+  { text: 'Kontrol paneli :7778 üzerinde aktif', cls: '', delay: 90 },
+  { text: 'Tüm sistemler çalışıyor.', cls: 'green', delay: 200 },
+  { text: '', cls: '', delay: 80 },
+  { text: '> komuta merkezine giriliyor...', cls: 'accent', delay: 300 },
+];
+
+function runBootSequence() {
+  const container = document.getElementById('bootContent');
+  const bar = document.getElementById('bootBar');
+  const barFill = document.getElementById('bootBarFill');
+  const overlay = document.getElementById('bootOverlay');
+  const world = document.getElementById('mainWorld');
+
+  let totalDelay = 0;
+  const totalTime = BOOT_LINES.reduce((s, l) => s + l.delay, 0);
+
+  // Create all line elements
+  BOOT_LINES.forEach((line, i) => {
+    const el = document.createElement('div');
+    el.className = 'boot-line' + (line.cls ? ' ' + line.cls : '');
+    el.textContent = line.text || '\u00A0';
+    container.appendChild(el);
+  });
+
+  const lineEls = container.querySelectorAll('.boot-line');
+
+  // Show bar
+  setTimeout(() => { bar.classList.add('show'); }, 200);
+
+  // Reveal lines one by one
+  let elapsed = 0;
+  BOOT_LINES.forEach((line, i) => {
+    elapsed += line.delay;
+    const t = elapsed;
+    setTimeout(() => {
+      lineEls[i].classList.add('show');
+      // Update progress bar
+      const pct = Math.min(100, (t / totalTime) * 100);
+      barFill.style.width = pct + '%';
+      // Auto-scroll
+      container.scrollTop = container.scrollHeight;
+    }, t);
+  });
+
+  // Finish: fade out boot, reveal main
+  const finishTime = elapsed + 400;
+  setTimeout(() => {
+    barFill.style.width = '100%';
+  }, elapsed + 100);
+
+  setTimeout(() => {
+    overlay.classList.add('fade-out');
+    world.style.transition = 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+    world.style.opacity = '1';
+  }, finishTime);
+
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    // Start the main dashboard
+    start();
+  }, finishTime + 800);
+}
+
+// ═══════════════════════════════════════════
+// LIVE CLOCK
+// ═══════════════════════════════════════════
+function updateClock() {
+  const el = document.getElementById('headerClock');
+  if (!el) return;
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  el.textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ═══════════════════════════════════════════
+// MAIN APPLICATION
+// ═══════════════════════════════════════════
+const A = {{ agents | tojson }};
+const CFG = {{ config | tojson }};
+let sel = 'goat';
+let onboardStep = null;
+const onboardData = {};
+const log = document.getElementById('log');
+const botEl = document.getElementById('bot');
+const botStat = document.getElementById('botStatus');
+let lineDelay = 0;
+
+// ─── Typing Animation Engine ───
+const TYPE_SPEED = 12; // ms per character
+const TYPE_ENABLED = true;
+
+function typeText(el, text, cls, callback) {
+  if (!TYPE_ENABLED || text.length > 120 || text.length === 0) {
+    // For long lines or empty, just show immediately
+    el.innerHTML = text;
+    el.classList.add('typed');
+    if (callback) callback();
+    return;
+  }
+
+  el.classList.add('typed');
+  el.innerHTML = '';
+  const cursor = document.createElement('span');
+  cursor.className = 'type-cursor';
+
+  let i = 0;
+  el.appendChild(cursor);
+
+  function typeNext() {
+    if (i < text.length) {
+      // Handle HTML entities
+      if (text[i] === '<') {
+        const end = text.indexOf('>', i);
+        if (end !== -1) {
+          const tag = text.substring(i, end + 1);
+          cursor.insertAdjacentHTML('beforebegin', tag);
+          i = end + 1;
+          typeNext();
+          return;
+        }
+      }
+      cursor.insertAdjacentText('beforebegin', text[i]);
+      i++;
+      // Vary speed slightly for natural feel
+      const speed = TYPE_SPEED + (Math.random() * 6 - 3);
+      setTimeout(typeNext, speed);
+    } else {
+      // Done typing - remove cursor
+      setTimeout(() => {
+        if (cursor.parentNode) cursor.remove();
+      }, 400);
+      if (callback) callback();
+    }
+  }
+  typeNext();
+}
+
+// ─── Narrative Engine ───
+function write(text, cls='', delay=0) {
+  const d = lineDelay + delay;
+  lineDelay += 80;
+  setTimeout(() => {
+    const el = document.createElement('div');
+    el.className = 'log-line ' + cls;
+
+    // Use typing for accent/bright/green lines (important ones)
+    const shouldType = (cls.includes('accent') || cls.includes('bright') || cls.includes('green')) && text.length > 0 && text.length < 100;
+
+    if (shouldType) {
+      log.appendChild(el);
+      typeText(el, text, cls);
+    } else {
+      el.innerHTML = text;
+      el.classList.add('fade-in');
+      log.appendChild(el);
+    }
+    log.scrollTop = log.scrollHeight;
+  }, d);
+}
+
+function action(text, fn, delay=0) {
+  const d = lineDelay + delay;
+  lineDelay += 80;
+  setTimeout(() => {
+    const el = document.createElement('div');
+    el.className = 'log-action';
+    el.textContent = text;
+    el.onclick = () => {
+      if (el.classList.contains('used')) return;
+      el.classList.add('used');
+      fn();
+    };
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  }, d);
+}
+
+function gap() { write('', 'space'); }
+
+// ─── Reveal stats sections ───
+function reveal(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove('hidden'); el.style.animationDelay = '0.2s'; }
+}
+
+function agentOn(id) {
+  const d = document.getElementById('d-' + id);
+  const l = document.getElementById('al-' + id);
+  if (d) d.classList.add('on');
+  if (l) l.classList.add('on');
+}
+
+function botState(state, dur) {
+  botEl.className = 'bot ' + state;
+  const stateNames = {think:'işliyor',success:'tamam',wave:'selamlıyor','':'beklemede'};
+  botStat.textContent = stateNames[state] || state || 'beklemede';
+  botStat.className = 'bot-status' + (state ? ' on' : '');
+  if (dur) setTimeout(() => { botEl.className = 'bot'; botStat.textContent = 'beklemede'; botStat.className = 'bot-status'; }, dur);
+}
+
+// ─── Opening Sequence ───
+function start() {
+  lineDelay = 0;
+
+  write('ajans boş.', 'bright', 0);
+  write('müşteri yok. lead yok. süreç yok.', 'dim', 400);
+
+  if (!CFG.agency_name) {
+    gap();
+    write('bir bot karanlıkta sessizce çalışıyor.', 'dim', 800);
+    gap();
+    write('seni tanımıyorum henüz.', 'dim', 1200);
+    gap();
+    write('adın ne?', 'accent', 1600);
+    onboardStep = 'name';
+    document.getElementById('input').placeholder = 'adını yaz...';
+  } else {
+    gap();
+    write(`${CFG.agency_name} başlatılıyor.`, 'accent', 600);
+    write(`niş: ${CFG.niche || '—'}. şehirler: ${(CFG.target_cities || []).join(', ') || '—'}.`, 'dim', 800);
+    reveal('secAgency');
+    updateAgencyStats();
+    postSetupSequence();
+  }
+
+  // Always reveal agents
+  setTimeout(() => { reveal('secAgents'); }, 1500);
+  setTimeout(() => { botEl.classList.remove('wave'); }, 2000);
+}
+
+function postSetupSequence() {
+  lineDelay = 0;
+  gap();
+  write('bot ufku tarıyor. henüz lead yok.', 'dim', 400);
+  gap();
+  action('→ müşteri adaylarını ara', () => doScout(), 600);
+  action('→ mentora bir şey sor', () => { sel='mentor'; agentOn('mentor'); write('', 'space'); write('mentor dinliyor. aşağıya yaz.', 'green'); document.getElementById('input').placeholder='bir şey sor...'; }, 700);
+
+  // Check if we already have leads from previous session
+  fetch('/api/agent/scout/result').then(r=>r.json()).then(d=>{
+    if(d.status !== 'not_run' && d.result?.metrics?.total_found > 0) {
+      lineDelay = 0;
+      gap();
+      write(`dur — önceki taramada ${d.result.metrics.total_found} lead bulunmuş.`, 'yellow', 200);
+      reveal('secLeads');
+      updateLeadStats(d.result.metrics);
+      agentOn('scout');
+      gap();
+      action('→ leadleri puanla', () => doFilter(), 400);
+      fetch('/api/agent/filter/result').then(r=>r.json()).then(d2=>{
+        if(d2.status !== 'not_run' && d2.result?.metrics) {
+          updateLeadStats({...d.result.metrics, ...d2.result.metrics});
+          agentOn('filter');
+          reveal('secPipeline');
+          document.getElementById('sStage').textContent = 'puanlandı';
+        }
+      });
+    }
+  });
+}
+
+// ─── Actions (real backend calls) ───
+function doScout() {
+  const q = CFG.niche || 'küçük işletmeler';
+  const loc = (CFG.target_cities || [])[0] || 'Istanbul';
+
+  sel = 'scout';
+  lineDelay = 0;
+  gap();
+  write(`scout aktif. "${q}" araması ${loc} için başladı...`, 'accent');
+  botState('think');
+  botStat.textContent = 'tarıyor';
+  officeSetWorking('scout', true);
+
+  fetch('/api/agent/scout/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({query: q, location: loc, limit: 50})
+  }).then(r => r.json()).then(d => {
+    officeSetWorking('scout', false);
+    botState('success', 2500);
+    agentOn('scout');
+    lineDelay = 0;
+    gap();
+
+    if (d.status === 'ok' && d.result && d.result.metrics) {
+      const n = d.result.metrics.total_found || 0;
+      const e = d.result.metrics.with_email || 0;
+      reveal('secLeads');
+      write(`${n} işletme bulundu.`, 'bright');
+      write(`${e} tanesinin email adresi var.`, 'green');
+      updateLeadStats(d.result.metrics);
+      gap();
+      write('liste belirdi. ham, filtrelenmemiş.', 'dim');
+      gap();
+      action('→ leadleri puanla', () => doFilter());
+      document.getElementById('headerSub').textContent = `${n} lead bulundu`;
+      checkDone('chkScout');
+    } else {
+      write('scout tamamlandı ama sonuç boş veya hata oluştu.', 'yellow');
+      if (d.error) write(`  hata: ${d.error}`, 'red indent');
+    }
+  }).catch(e => {
+    officeSetWorking('scout', false);
+    botState('', 0);
+    lineDelay = 0;
+    gap();
+    write(`scout hatası: ${e.message}`, 'red');
+  });
+}
+
+function doFilter() {
+  sel = 'filter';
+  lineDelay = 0;
+  gap();
+  write('filtre her leadi puanlıyor...', 'accent');
+  botState('think');
+  botStat.textContent = 'puanlıyor';
+  officeSetWorking('filter', true);
+
+  fetch('/api/agent/filter/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  }).then(r => r.json()).then(d => {
+    officeSetWorking('filter', false);
+    botState('success', 2500);
+    agentOn('filter');
+    lineDelay = 0;
+    gap();
+
+    if (d.status === 'ok' && d.result && d.result.metrics) {
+      const m = d.result.metrics;
+      reveal('secPipeline');
+      document.getElementById('sStage').textContent = 'puanlandı';
+      document.getElementById('sLastRun').textContent = 'şimdi';
+
+      write(`${m.total_scored || 0} lead puanlandı.`, 'bright');
+      write(`  ${m.hot || 0} sıcak — iletişime hazır.`, 'accent indent');
+      write(`  ${m.warm || 0} ılık — potansiyel var.`, 'yellow indent');
+      write(`  ${m.cold || 0} soğuk — düşük ihtimal.`, 'blue indent');
+      updateLeadStats(m);
+
+      gap();
+      write('sıcak leadler karanlıkta parlıyor.', 'dim');
+      gap();
+      action('→ teklif hazırla', () => doPitch());
+      action('→ email kampanyası oluştur', () => doOutreach());
+      document.getElementById('headerSub').textContent = `${m.hot || 0} sıcak lead`;
+      checkDone('chkFilter');
+    } else {
+      write('filter tamamlandı ama sonuç boş.', 'yellow');
+      if (d.error) write(`  hata: ${d.error}`, 'red indent');
+    }
+  }).catch(e => {
+    officeSetWorking('filter', false);
+    botState('', 0);
+    lineDelay = 0;
+    gap();
+    write(`filter hatası: ${e.message}`, 'red');
+  });
+}
+
+function doOutreach() {
+  if (!CFG.instantly_api_key) {
+    lineDelay = 0;
+    gap();
+    write('outreach için instantly.ai API anahtarı gerekli.', 'yellow');
+    write('  → instantly.ai hesabından API key al: app.instantly.ai/settings', 'dim indent');
+    gap();
+    write('instantly API key\'ini yaz:', 'accent');
+    onboardStep = 'instantly_key';
+    document.getElementById('input').placeholder = 'instantly api key...';
+    return;
+  }
+
+  sel = 'outreach';
+  lineDelay = 0;
+  gap();
+  write('outreach aktif. kampanya hazırlanıyor...', 'accent');
+  botState('think');
+  botStat.textContent = 'kampanya';
+  officeSetWorking('outreach', true);
+
+  fetch('/api/agent/outreach/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  }).then(r => r.json()).then(d => {
+    officeSetWorking('outreach', false);
+    botState('success', 2500);
+    agentOn('outreach');
+    lineDelay = 0;
+    gap();
+
+    if (d.status === 'ok' && d.result) {
+      write('kampanya oluşturuldu.', 'bright');
+      if (d.result.summary) write(`  ${d.result.summary}`, 'dim indent');
+      if (d.result.metrics) {
+        if (d.result.metrics.campaign_id) write(`  kampanya ID: ${d.result.metrics.campaign_id}`, 'dim indent');
+        if (d.result.metrics.leads_added) write(`  lead eklendi: ${d.result.metrics.leads_added}`, 'green indent');
+        if (d.result.metrics.email_steps) write(`  email adımları: ${d.result.metrics.email_steps}`, 'dim indent');
+      }
+      gap();
+      write('kampanya TASLAK olarak kaydedildi.', 'yellow');
+      write('  → instantly.ai panelinden aktif edebilirsin.', 'dim indent');
+      gap();
+      action('→ teklif hazırla', () => doPitch());
+      document.getElementById('headerSub').textContent = 'kampanya hazır';
+      checkDone('chkOutreach');
+    } else {
+      write('outreach tamamlandı ama bir sorun oluştu.', 'yellow');
+      if (d.error) write(`  hata: ${d.error}`, 'red indent');
+    }
+  }).catch(e => {
+    officeSetWorking('outreach', false);
+    botState('', 0);
+    lineDelay = 0;
+    gap();
+    write(`outreach hatası: ${e.message}`, 'red');
+  });
+}
+
+function updateAgencyStats() {
+  document.getElementById('sName').textContent = CFG.agency_name || '—';
+  document.getElementById('sNiche').textContent = CFG.niche || '—';
+  document.getElementById('sCities').textContent = (CFG.target_cities || []).join(', ') || '—';
+}
+
+function updateLeadStats(m) {
+  if (m.total_found !== undefined) document.getElementById('sFound').textContent = m.total_found;
+  if (m.hot !== undefined) document.getElementById('sHot').textContent = m.hot;
+  if (m.warm !== undefined) document.getElementById('sWarm').textContent = m.warm;
+  if (m.cold !== undefined) document.getElementById('sCold').textContent = m.cold;
+  // Bar
+  const total = (m.hot||0) + (m.warm||0) + (m.cold||0);
+  if (total > 0) {
+    document.getElementById('barHot').style.width = ((m.hot||0)/total*100) + '%';
+  }
+}
+
+// ─── Chat Input ───
+function handleInput() {
+  const el = document.getElementById('input');
+  const msg = el.value.trim();
+  if (!msg) return;
+  el.value = '';
+
+  // ─── Onboarding Flow ───
+  if (onboardStep) {
+    write(`> ${msg}`, 'bright');
+    lineDelay = 0;
+
+    if (onboardStep === 'name') {
+      onboardData.owner_name = msg;
+      gap();
+      write(`merhaba ${msg}.`, 'accent', 200);
+      gap();
+      write('ajansının adı ne olsun?', 'accent', 600);
+      onboardStep = 'agency';
+      el.placeholder = 'ajans adı...';
+      return;
+    }
+    if (onboardStep === 'agency') {
+      const unsure = msg.toLowerCase().match(/bilmiyorum|emin değilim|sence|ne önerirsin|karar veremedim|fikrim yok|\?$/);
+      if (unsure) {
+        gap();
+        write('ajans ismi basit ve akılda kalıcı olmalı. birkaç öneri:', 'dim', 200);
+        gap();
+        write('  [senin adın] Otomasyon', 'accent indent', 400);
+        write('  [niş] AI Ajansı (örn: Restoran AI)', 'accent indent', 500);
+        write('  kısa bir isim: Apex, Nexo, Akıl, Dijital Köprü', 'accent indent', 600);
+        gap();
+        write('bir isim yaz, sonra değiştirebilirsin.', 'dim', 800);
+        el.placeholder = 'ajans adı...';
+        return;
+      }
+      onboardData.agency_name = msg;
+      gap();
+      write(`"${msg}" — güzel isim.`, 'dim', 200);
+      gap();
+      write('hangi sektöre hizmet vereceksin?', 'accent', 500);
+      write('(örn: restoranlar, klinikler, oteller, e-ticaret)', 'faint', 700);
+      onboardStep = 'niche';
+      el.placeholder = 'sektör / niş...';
+      return;
+    }
+    if (onboardStep === 'niche') {
+      const unsure = msg.toLowerCase().match(/bilmiyorum|emin değilim|ne önerirsin|sence|karar veremedim|fikrim yok|yardım|help|öneri|tavsiye|\?$/);
+      if (unsure) {
+        gap();
+        write('sana birkaç öneri vereyim. bunlar en kolay başlanan nişler:', 'dim', 200);
+        gap();
+        write('  restoranlar — google yorum otomasyonu, sosyal medya', 'accent indent', 500);
+        write('  klinikler — randevu hatırlatma, hasta takibi', 'accent indent', 600);
+        write('  oteller — booking yanıtları, misafir iletişimi', 'accent indent', 700);
+        write('  e-ticaret — sipariş takibi, müşteri desteği', 'accent indent', 800);
+        write('  emlakçılar — lead takibi, otomatik ilan paylaşımı', 'accent indent', 900);
+        gap();
+        write('hangisini seçmek istersin?', 'accent', 1100);
+        el.placeholder = 'sektör seç...';
+        return;
+      }
+      onboardData.niche = msg;
+      gap();
+      write(`${msg} — iyi bir niş.`, 'dim', 200);
+      gap();
+      write('hangi şehirlerde müşteri arayalım?', 'accent', 500);
+      write('(virgülle ayır: Istanbul, Ankara, Izmir)', 'faint', 700);
+      onboardStep = 'cities';
+      el.placeholder = 'şehirler...';
+      return;
+    }
+    if (onboardStep === 'cities') {
+      const unsure = msg.toLowerCase().match(/bilmiyorum|emin değilim|sence|ne önerirsin|nerede|\?$/);
+      if (unsure) {
+        gap();
+        write('yaşadığın şehirle başla — müşterileri tanımak daha kolay.', 'dim', 200);
+        gap();
+        write('türkiye\'deki en büyük pazarlar:', 'dim', 400);
+        write('  Istanbul — en çok işletme, en çok fırsat', 'accent indent', 500);
+        write('  Ankara — devlet + özel sektör karışık', 'accent indent', 600);
+        write('  Izmir — turizm + gastronomi güçlü', 'accent indent', 700);
+        write('  Antalya — otel ve restoran yoğun', 'accent indent', 800);
+        gap();
+        write('bir veya birkaç şehir yaz.', 'dim', 1000);
+        el.placeholder = 'şehirler...';
+        return;
+      }
+      onboardData.target_cities = msg.split(',').map(s => s.trim()).filter(Boolean);
+      gap();
+      write('müşteri bulmak için Apify token gerekiyor.', 'dim', 200);
+      write('  → console.apify.com adresinden ücretsiz hesap aç.', 'faint', 400);
+      gap();
+      write('apify token\'ını yaz (atlamak için "atla" yaz):', 'accent', 600);
+      onboardStep = 'apify';
+      el.placeholder = 'apify_api_...';
+      return;
+    }
+    if (onboardStep === 'apify') {
+      if (msg.toLowerCase() !== 'atla' && msg.toLowerCase() !== 'skip') {
+        onboardData.apify_token = msg;
+        checkDone('chkApify');
+      }
+      onboardStep = null;
+
+      // Save config with all collected data
+      const config = {
+        agency_name: onboardData.agency_name,
+        owner_name: onboardData.owner_name,
+        niche: onboardData.niche,
+        target_cities: onboardData.target_cities,
+        target_industries: [onboardData.niche],
+      };
+      if (onboardData.apify_token) config.apify_token = onboardData.apify_token;
+      fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(config)});
+      Object.assign(CFG, config);
+
+      gap();
+      write('...', 'faint', 200);
+      gap();
+      write(`${config.agency_name} aktif.`, 'accent', 800);
+      write(`kurucu: ${config.owner_name}`, 'dim', 1000);
+      write(`niş: ${config.niche}`, 'dim', 1100);
+      write(`şehirler: ${config.target_cities.join(', ')}`, 'dim', 1200);
+      if (config.apify_token) write('apify: bağlandı.', 'green', 1300);
+
+      // Update office sign
+      office.sign = config.agency_name;
+      checkDone('chkSetup');
+
+      // Reveal stats
+      setTimeout(() => {
+        reveal('secAgency');
+        updateAgencyStats();
+      }, 1400);
+
+      // Continue to main flow
+      setTimeout(() => {
+        el.placeholder = 'bir şey yaz...';
+        postSetupSequence();
+      }, 1600);
+      return;
+    }
+    if (onboardStep === 'instantly_key') {
+      if (msg.toLowerCase() !== 'atla' && msg.toLowerCase() !== 'skip') {
+        CFG.instantly_api_key = msg;
+        const config = Object.assign({}, CFG, {instantly_api_key: msg});
+        fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(config)});
+        checkDone('chkInstantly');
+        gap();
+        write('instantly.ai bağlandı.', 'green', 200);
+        gap();
+        write('şimdi kampanya oluşturabilirsin.', 'dim', 400);
+        gap();
+        action('→ email kampanyası oluştur', () => doOutreach(), 600);
+      } else {
+        gap();
+        write('instantly.ai atlandı. daha sonra ayarlayabilirsin.', 'dim', 200);
+      }
+      onboardStep = null;
+      el.placeholder = 'bir şey yaz...';
+      return;
+    }
+    if (onboardStep === 'fal_key') {
+      if (msg.toLowerCase() !== 'atla' && msg.toLowerCase() !== 'skip') {
+        CFG.fal_key = msg;
+        const config = Object.assign({}, CFG, {fal_key: msg});
+        fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(config)});
+        checkDone('chkFal');
+        gap();
+        write('fal.ai bağlandı.', 'green', 200);
+        gap();
+        write('şimdi görsel oluşturabilirsin.', 'dim', 400);
+        gap();
+        action('→ reklam görseli oluştur', () => doCreative(), 600);
+      } else {
+        gap();
+        write('fal.ai atlandı. daha sonra ayarlayabilirsin.', 'dim', 200);
+      }
+      onboardStep = null;
+      el.placeholder = 'bir şey yaz...';
+      return;
+    }
+  }
+
+  // Check for commands
+  const cmd = msg.toLowerCase();
+  if (cmd === 'scout' || cmd === 'ara' || cmd === 'müşteri bul' || cmd === 'search') { doScout(); return; }
+  if (cmd === 'filter' || cmd === 'puanla' || cmd === 'filtrele' || cmd === 'score') { doFilter(); return; }
+  if (cmd === 'pipeline' || cmd === 'çalıştır' || cmd === 'run') { doScout(); return; }
+  if (cmd === 'clear' || cmd === 'temizle') { log.innerHTML = ''; lineDelay=0; start(); return; }
+  if (cmd === 'reset' || cmd === 'sıfırla') { fullReset(); return; }
+  if (cmd === 'leadler' || cmd === 'leads' || cmd === 'liste' || cmd === 'tablo') { showLeadTable(); return; }
+  if (cmd === 'yardım' || cmd === 'help' || cmd === 'komutlar') { showHelp(); return; }
+  if (cmd.match(/teklif|proposal|pitch/)) { doPitch(); return; }
+  if (cmd.match(/görsel|reklam|creative|banner|ad oluştur/)) { doCreative(); return; }
+  // Outreach intent detection
+  if (cmd.match(/outreach|ulaş|email|gönder|kampanya|instantly|iletişim kur|mesaj at|reach out|cold email|soğuk email/)) { doOutreach(); return; }
+  if (cmd === 'setup' || cmd === 'kur' || cmd === 'ayarlar') {
+    lineDelay = 0; gap();
+    write('adın ne?', 'accent');
+    onboardStep = 'name';
+    document.getElementById('input').placeholder = 'adını yaz...';
+    return;
+  }
+
+  // Chat with selected agent
+  lineDelay = 0;
+  write(`> ${msg}`, 'bright');
+  botState('think');
+  botStat.textContent = 'düşünüyor';
+
+  const agent = sel || 'mentor';
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({message: msg, agent_id: agent})
+  }).then(r => r.json()).then(d => {
+    botState('success', 2000);
+    lineDelay = 0;
+    gap();
+    let raw = d.response || 'yanıt yok.';
+    raw = raw.replace(/\*\*(.+?)\*\*/g, '$1');
+    raw = raw.replace(/\*(.+?)\*/g, '$1');
+    raw = raw.replace(/`(.+?)`/g, '$1');
+    raw = raw.replace(/^>\s?/gm, '');
+    const lines = raw.split('\n');
+    lines.forEach(line => {
+      if (line.startsWith('#')) write(line.replace(/^#+\s*/, ''), 'bright');
+      else if (line.startsWith('- ') || line.startsWith('* ')) write('  ' + line.replace(/^[-*]\s*/, '→ '), 'dim indent');
+      else if (line.match(/^\d+\.\s/)) write('  ' + line, 'dim indent');
+      else if (line.startsWith('|')) return;
+      else if (line.match(/^---+$/)) return;
+      else if (line.trim() === '') gap();
+      else write(line, 'dim');
+    });
+    agentOn(agent);
+  }).catch(e => {
+    botState('', 0);
+    write(`hata: ${e.message}`, 'red');
+  });
+}
+
+// ─── Setup ───
+function showSetup() {
+  const m = document.getElementById('setupModal');
+  m.style.display = 'block';
+  if (CFG.agency_name) document.getElementById('cfg-name').value = CFG.agency_name;
+  if (CFG.owner_name) document.getElementById('cfg-owner').value = CFG.owner_name;
+  if (CFG.niche) document.getElementById('cfg-niche').value = CFG.niche;
+  if (CFG.target_cities) document.getElementById('cfg-cities').value = CFG.target_cities.join(', ');
+}
+
+function saveSetup() {
+  const config = {
+    agency_name: document.getElementById('cfg-name').value,
+    owner_name: document.getElementById('cfg-owner').value,
+    niche: document.getElementById('cfg-niche').value,
+    target_cities: document.getElementById('cfg-cities').value.split(',').map(s=>s.trim()).filter(Boolean),
+    target_industries: [document.getElementById('cfg-niche').value],
+    apify_token: document.getElementById('cfg-apify').value,
+  };
+  fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(config)})
+    .then(r => r.json()).then(() => {
+      document.getElementById('setupModal').style.display = 'none';
+      Object.assign(CFG, config);
+      reveal('secAgency');
+      updateAgencyStats();
+
+      lineDelay = 0;
+      gap();
+      write(`${config.agency_name} aktif.`, 'accent');
+      write(`hedef: ${config.target_cities.join(', ')} şehirlerinde ${config.niche}.`, 'dim');
+      postSetupSequence();
+    });
+}
+
+// ═══════════════════════════════════════════
+// PIXEL OFFICE + PARTICLES + DATA RAIN
+// ═══════════════════════════════════════════
+const canvas = document.getElementById('officeCanvas');
+const ctx = canvas.getContext('2d');
+const PX = 4;
+const COLS = 48, ROWS = 11;
+
+function resizeCanvas() {
+  const wrap = document.getElementById('officeWrap');
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Colors
+const C = {
+  floor: '#0e0e12', floorLine: '#141418', wall: '#18181e', wallTop: '#1e1e26',
+  desk: '#2a2530', deskTop: '#342e3a', deskLeg: '#1e1a24',
+  monitor: '#0a0a0e', monitorFrame: '#2a2a34', screenOff: '#0c0c10',
+  screenOn: '#1a3a28', screenAccent: '#e85d26', screenGreen: '#2a6a4a',
+  chair: '#22202a', chairSeat: '#2e2a36',
+  plant: '#1a3a28', plantPot: '#3a3028', plantLeaf: '#2a6a3a',
+  lamp: '#3a3028', lampLight: 'rgba(242,107,58,0.04)',
+  botBody: '#1e1e26', botHead: '#24242e', botEye: '#e85d26', botEyeGreen: '#34d399',
+  agentBody: '#1a2a3a', agentHead: '#2a3a4a',
+};
+
+// Office state
+const office = {
+  agents: {},
+  lightsOn: false,
+  sign: '',
+};
+
+// ── PARTICLE SYSTEM ──
+const particles = [];
+const MAX_PARTICLES = 40;
+
+function initParticles() {
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    particles.push({
+      x: Math.random() * 800,
+      y: Math.random() * 180,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -Math.random() * 0.2 - 0.05,
+      size: Math.random() * 2 + 0.5,
+      alpha: Math.random() * 0.15 + 0.03,
+      color: Math.random() > 0.7 ? '#e85d26' : (Math.random() > 0.5 ? '#34d399' : '#60a5fa'),
+    });
+  }
+}
+initParticles();
+
+function updateParticles() {
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    // Wrap around
+    if (p.y < -5) { p.y = canvas.height / PX + 5; p.x = Math.random() * (canvas.width / PX); }
+    if (p.x < -5) p.x = canvas.width / PX + 5;
+    if (p.x > canvas.width / PX + 5) p.x = -5;
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.alpha;
+    ctx.fillRect(p.x * PX, p.y * PX, p.size, p.size);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── DATA RAIN ──
+const dataRain = [];
+const DATA_CHARS = '01アイウエオカキクケコ';
+const MAX_RAIN = 18;
+
+function initDataRain() {
+  for (let i = 0; i < MAX_RAIN; i++) {
+    dataRain.push({
+      x: Math.random() * 200,
+      y: Math.random() * -50,
+      speed: Math.random() * 0.4 + 0.15,
+      chars: [],
+      len: Math.floor(Math.random() * 5) + 3,
+      alpha: Math.random() * 0.06 + 0.02,
+    });
+    // Pre-fill chars
+    for (let j = 0; j < dataRain[i].len; j++) {
+      dataRain[i].chars.push(DATA_CHARS[Math.floor(Math.random() * DATA_CHARS.length)]);
+    }
+  }
+}
+initDataRain();
+
+function updateDataRain() {
+  dataRain.forEach(col => {
+    col.y += col.speed;
+    if (col.y > canvas.height / PX + 10) {
+      col.y = -col.len * 3;
+      col.x = Math.random() * (canvas.width / PX);
+      // Randomize chars
+      for (let j = 0; j < col.chars.length; j++) {
+        if (Math.random() > 0.7) col.chars[j] = DATA_CHARS[Math.floor(Math.random() * DATA_CHARS.length)];
+      }
+    }
+  });
+}
+
+function drawDataRain() {
+  ctx.font = `${PX * 2}px 'Space Mono', monospace`;
+  ctx.textAlign = 'center';
+  dataRain.forEach(col => {
+    col.chars.forEach((ch, i) => {
+      const cy = col.y + i * 3;
+      const fade = i === 0 ? col.alpha * 2 : col.alpha * (1 - i / col.len);
+      if (fade <= 0) return;
+      ctx.fillStyle = i === 0 ? '#34d399' : '#1a3a28';
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.fillText(ch, col.x * PX, cy * PX);
+    });
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── Draw primitives ──
+function px(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * PX, y * PX, w * PX, h * PX);
+}
+
+// ── Draw Floor ──
+function drawFloor() {
+  for (let y = 6; y < ROWS * PX; y++) {
+    for (let x = 0; x < canvas.width / PX; x++) {
+      const c = (x + y) % 8 === 0 ? C.floorLine : C.floor;
+      px(x, y * 3 + 10, 1, 1, c);
+    }
+  }
+  ctx.fillStyle = C.floor;
+  ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
+
+  ctx.strokeStyle = C.floorLine;
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += PX * 12) {
+    ctx.beginPath();
+    ctx.moveTo(x, canvas.height * 0.55);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = canvas.height * 0.55; y < canvas.height; y += PX * 8) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+}
+
+// ── Draw Wall ──
+function drawWall() {
+  const wallH = canvas.height * 0.55;
+  ctx.fillStyle = C.wall;
+  ctx.fillRect(0, 0, canvas.width, wallH);
+  ctx.fillStyle = C.wallTop;
+  ctx.fillRect(0, wallH - PX * 2, canvas.width, PX * 2);
+  ctx.fillStyle = '#1a1a22';
+  for (let x = 0; x < canvas.width; x += PX * 16) {
+    ctx.fillRect(x, 0, 1, wallH - PX * 2);
+  }
+}
+
+// ── Draw Desk ──
+function drawDesk(cx, cy, hasMonitor, screenColor) {
+  px(cx - 6, cy, 12, 2, C.deskTop);
+  px(cx - 7, cy + 1, 14, 1, C.desk);
+  px(cx - 6, cy + 2, 1, 5, C.deskLeg);
+  px(cx + 5, cy + 2, 1, 5, C.deskLeg);
+  if (hasMonitor) {
+    px(cx - 3, cy - 6, 6, 5, C.monitorFrame);
+    px(cx - 2, cy - 5, 4, 3, screenColor || C.screenOff);
+    // Screen glow
+    if (screenColor && screenColor !== C.screenOff) {
+      ctx.fillStyle = screenColor;
+      ctx.globalAlpha = 0.06;
+      ctx.fillRect((cx - 5) * PX, (cy - 8) * PX, 10 * PX, 8 * PX);
+      ctx.globalAlpha = 1;
+    }
+    px(cx, cy - 1, 1, 1, C.monitorFrame);
+    px(cx - 2, cy - 0, 4, 1, '#1a1a22');
+  }
+}
+
+// ── Draw Chair ──
+function drawChair(cx, cy) {
+  px(cx - 2, cy + 1, 4, 2, C.chairSeat);
+  px(cx - 2, cy - 2, 1, 3, C.chair);
+  px(cx + 1, cy - 2, 1, 3, C.chair);
+  px(cx - 2, cy - 3, 4, 1, C.chair);
+  px(cx - 1, cy + 3, 1, 1, C.chair);
+  px(cx + 1, cy + 3, 1, 1, C.chair);
+}
+
+// ── Draw Bot Character ──
+function drawBot(cx, cy, eyeColor, frame) {
+  const bob = Math.sin(Date.now() / 500 + cx) > 0.5 ? -1 : 0;
+  const by = cy + bob;
+  px(cx - 2, by + 2, 5, 5, C.botBody);
+  px(cx - 3, by - 4, 7, 5, C.botHead);
+  px(cx - 2, by - 3, 5, 3, '#0a0a0e');
+  px(cx - 1, by - 2, 1, 1, eyeColor || C.botEye);
+  px(cx + 1, by - 2, 1, 1, eyeColor || C.botEye);
+  // Eye glow - enhanced
+  ctx.fillStyle = (eyeColor || C.botEye);
+  ctx.globalAlpha = 0.2;
+  ctx.fillRect((cx - 2) * PX, (by - 3) * PX, 5 * PX, 3 * PX);
+  ctx.globalAlpha = 0.06;
+  ctx.fillRect((cx - 4) * PX, (by - 5) * PX, 9 * PX, 7 * PX);
+  ctx.globalAlpha = 1;
+  px(cx, by - 6, 1, 2, '#3a3a48');
+  px(cx, by - 7, 1, 1, C.botEye);
+  // Antenna glow
+  ctx.fillStyle = C.botEye;
+  ctx.globalAlpha = 0.15 + Math.sin(Date.now() / 400) * 0.1;
+  ctx.beginPath();
+  ctx.arc(cx * PX, (by - 7) * PX, PX * 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  px(cx - 3, by + 3, 1, 3, '#3a3a48');
+  px(cx + 3, by + 3, 1, 3, '#3a3a48');
+  if (frame && frame.label) {
+    ctx.fillStyle = eyeColor || C.botEye;
+    ctx.globalAlpha = 0.7;
+    ctx.font = `${PX * 2}px 'Space Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(frame.label, cx * PX, (by + 11) * PX);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── Draw Agent Character ──
+function drawAgent(cx, cy, color, eyeColor, label, working) {
+  const bob = working ? (Math.sin(Date.now() / 300 + cx) > 0.3 ? -1 : 0) : 0;
+  const by = cy + bob;
+  ctx.fillStyle = color;
+  ctx.fillRect((cx - 2) * PX, (by + 2) * PX, 5 * PX, 4 * PX);
+  ctx.fillRect((cx - 2) * PX, (by - 2) * PX, 5 * PX, 4 * PX);
+  ctx.fillStyle = eyeColor;
+  ctx.fillRect((cx - 1) * PX, (by - 1) * PX, 1 * PX, 1 * PX);
+  ctx.fillRect((cx + 1) * PX, (by - 1) * PX, 1 * PX, 1 * PX);
+  // Eye glow - enhanced
+  ctx.fillStyle = eyeColor;
+  ctx.globalAlpha = 0.15;
+  ctx.fillRect((cx - 2) * PX, (by - 2) * PX, 5 * PX, 4 * PX);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#2a2a38';
+  ctx.fillRect((cx - 3) * PX, (by + 3) * PX, 1 * PX, 2 * PX);
+  ctx.fillRect((cx + 3) * PX, (by + 3) * PX, 1 * PX, 2 * PX);
+  if (label) {
+    ctx.fillStyle = eyeColor;
+    ctx.globalAlpha = 0.6;
+    ctx.font = `${PX * 2}px 'Space Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, cx * PX, (by + 10) * PX);
+    ctx.globalAlpha = 1;
+  }
+  if (working) {
+    ctx.fillStyle = '#1e1e26';
+    ctx.fillRect((cx - 4) * PX, (by - 6) * PX, 9 * PX, 3 * PX);
+    ctx.fillStyle = eyeColor;
+    ctx.globalAlpha = 0.8;
+    ctx.font = `${PX * 1.5}px 'Space Mono', monospace`;
+    ctx.fillText('...', cx * PX, (by - 4) * PX);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── Draw Plant ──
+function drawPlant(cx, cy) {
+  px(cx, cy + 2, 3, 3, C.plantPot);
+  px(cx + 1, cy + 1, 1, 1, C.plant);
+  px(cx, cy, 1, 1, C.plantLeaf);
+  px(cx + 2, cy, 1, 1, C.plantLeaf);
+  px(cx + 1, cy - 1, 1, 1, C.plantLeaf);
+}
+
+// ── Draw Locked Desk ──
+function drawLockedDesk(cx, cy) {
+  drawDesk(cx, cy, true, '#0c0c10');
+  ctx.strokeStyle = '#2a2a34';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo((cx - 1) * PX, (cy - 4) * PX);
+  ctx.lineTo((cx + 2) * PX, (cy - 2) * PX);
+  ctx.moveTo((cx + 2) * PX, (cy - 4) * PX);
+  ctx.lineTo((cx - 1) * PX, (cy - 2) * PX);
+  ctx.stroke();
+}
+
+// ── Office Desk Positions ──
+const DESKS = {
+  goat:     { x: 20, y: 24, label: 'goat' },
+  scout:    { x: 45, y: 24, label: 'scout' },
+  filter:   { x: 70, y: 24, label: 'filter' },
+  mentor:   { x: 95, y: 24, label: 'mentor' },
+  outreach: { x: 120, y: 24, label: 'outreach' },
+  pitch:    { x: 145, y: 24, label: 'pitch' },
+};
+
+const officeState = {
+  active: new Set(['goat']),
+  working: new Set(),
+};
+
+function officeAddAgent(id) { officeState.active.add(id); }
+function officeSetWorking(id, w) { if(w) officeState.working.add(id); else officeState.working.delete(id); }
+
+// ── Main Render Loop ──
+function renderOffice() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWall();
+
+  // Draw data rain behind everything
+  updateDataRain();
+  drawDataRain();
+
+  drawFloor();
+
+  // Plants
+  drawPlant(8, 28);
+  drawPlant(canvas.width / PX - 10, 28);
+
+  // Desks and agents
+  Object.entries(DESKS).forEach(([id, d]) => {
+    const isActive = officeState.active.has(id);
+    const isWorking = officeState.working.has(id);
+    const isLocked = ['outreach', 'pitch'].includes(id) && !isActive;
+
+    if (isLocked) {
+      drawLockedDesk(d.x, d.y);
+      return;
+    }
+
+    const screenColor = isWorking ? C.screenAccent : (isActive ? C.screenGreen : C.screenOff);
+    drawDesk(d.x, d.y, true, screenColor);
+    drawChair(d.x, d.y + 5);
+
+    if (isActive) {
+      if (id === 'goat') {
+        const eyeC = isWorking ? C.botEye : (officeState.working.size > 0 ? C.botEye : C.botEye);
+        drawBot(d.x, d.y - 2, eyeC, {label: d.label});
+      } else {
+        const colors = {
+          scout: { body: '#1a2a4a', eye: '#60a5fa' },
+          filter: { body: '#3a2a1a', eye: '#fbbf24' },
+          mentor: { body: '#2a1a3a', eye: '#a78bfa' },
+          outreach: { body: '#3a1a1a', eye: '#f87171' },
+          pitch: { body: '#1a3a2a', eye: '#34d399' },
+        };
+        const c = colors[id] || { body: '#2a2a3a', eye: '#8a8a98' };
+        drawAgent(d.x, d.y - 2, c.body, c.eye, d.label, isWorking);
+      }
+    }
+  });
+
+  // Draw particles on top
+  updateParticles();
+  drawParticles();
+
+  // Agency sign on wall
+  if (office.sign) {
+    ctx.fillStyle = C.wallTop;
+    const signW = office.sign.length * PX * 2 + PX * 8;
+    const signX = canvas.width / 2 - signW / 2;
+    ctx.fillRect(signX, PX * 3, signW, PX * 5);
+    // Neon border glow
+    ctx.shadowColor = '#e85d26';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = C.botEye;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(signX, PX * 3, signW, PX * 5);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = C.botEye;
+    ctx.font = `bold ${PX * 2.5}px 'Space Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(office.sign, canvas.width / 2, PX * 6.5);
+  }
+
+  requestAnimationFrame(renderOffice);
+}
+
+renderOffice();
+
+// ─── Reset ───
+function fullReset() {
+  if (!confirm('Her şey sıfırlanacak. Emin misin?')) return;
+  fetch('/api/reset', {method:'POST'}).then(() => {
+    localStorage.clear();
+    location.reload();
+  });
+}
+
+// ─── Lead Table ───
+function showLeadTable() {
+  lineDelay = 0;
+  gap();
+  write('leadler yükleniyor...', 'dim');
+
+  // Try qualified leads first, then raw
+  fetch('/api/leads/qualified').then(r => r.json()).then(leads => {
+    if (leads && leads.length > 0) {
+      renderLeadTable(leads, true);
+    } else {
+      // Fall back to raw leads
+      fetch('/api/leads').then(r => r.json()).then(rawLeads => {
+        if (rawLeads && rawLeads.length > 0) {
+          renderLeadTable(rawLeads, false);
+        } else {
+          lineDelay = 0; gap();
+          write('henüz lead yok. önce scout çalıştır.', 'yellow');
+          gap();
+          action('→ müşteri adaylarını ara', () => doScout());
+        }
+      });
+    }
+  }).catch(e => {
+    lineDelay = 0; gap();
+    write(`lead yükleme hatası: ${e.message}`, 'red');
+  });
+}
+
+function renderLeadTable(leads, isQualified) {
+  lineDelay = 0; gap();
+  write(`${leads.length} lead ${isQualified ? '(puanlanmış)' : '(ham)'}:`, 'bright');
+  gap();
+  if (isQualified) {
+    write('  PUAN  DURUM   İSİM                          EMAİL', 'faint');
+    write('  ' + '─'.repeat(70), 'faint');
+    leads.slice(0, 30).forEach(l => {
+      const score = String(l.score || 0).padStart(4);
+      const q = l.qualification || 'cold';
+      const qual = q.padEnd(6);
+      const name = (l.name || l.title || '—').padEnd(30).substring(0, 30);
+      const email = (l.email || '—').substring(0, 24);
+      const qualColor = q === 'hot' ? 'accent' : q === 'warm' ? 'yellow' : 'blue';
+      write(`  ${score}  ${qual} ${name} ${email}`, qualColor);
+    });
+  } else {
+    write('  İSİM                              EMAİL                    TELEFON', 'faint');
+    write('  ' + '─'.repeat(70), 'faint');
+    leads.slice(0, 30).forEach(l => {
+      const name = (l.name || l.title || '—').padEnd(34).substring(0, 34);
+      const email = (l.email || '—').padEnd(25).substring(0, 25);
+      const phone = (l.phone || '—').substring(0, 16);
+      write(`  ${name}${email}${phone}`, 'dim');
+    });
+  }
+  if (leads.length > 30) write(`  ... ve ${leads.length - 30} lead daha`, 'faint');
+  gap();
+  action('→ teklif hazırla', () => doPitch());
+  action('→ email kampanyası oluştur', () => doOutreach());
+}
+
+// ─── Pitch ───
+function doPitch() {
+  sel = 'pitch';
+  lineDelay = 0;
+  gap();
+  write('pitch aktif. teklif hazırlanıyor...', 'accent');
+  botState('think');
+  botStat.textContent = 'teklif';
+  officeSetWorking('pitch', true);
+
+  fetch('/api/agent/pitch/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  }).then(r => r.json()).then(d => {
+    officeSetWorking('pitch', false);
+    botState('success', 2500);
+    agentOn('pitch');
+    lineDelay = 0;
+    gap();
+
+    if (d.status === 'ok' && d.result) {
+      if (d.result.summary) write(d.result.summary, 'bright');
+      if (d.result.metrics) {
+        const m = d.result.metrics;
+        if (m.client) write(`  müşteri: ${m.client}`, 'dim indent');
+        if (m.email) write(`  email: ${m.email}`, 'dim indent');
+        if (m.score) write(`  puan: ${m.score}`, 'dim indent');
+        if (m.cover_image) write(`  kapak görseli oluşturuldu.`, 'green indent');
+      }
+      if (d.result.proposal) {
+        gap();
+        write('─── TEKLİF ÖNİZLEME ───', 'accent');
+        gap();
+        // Parse proposal markdown
+        const lines = d.result.proposal.split('\n');
+        lines.slice(0, 30).forEach(line => {
+          if (line.startsWith('#')) write(line.replace(/^#+\s*/, ''), 'bright');
+          else if (line.startsWith('- ') || line.startsWith('* ')) write('  → ' + line.replace(/^[-*]\s*/, ''), 'accent indent');
+          else if (line.trim() === '') gap();
+          else write(line, 'dim');
+        });
+        write('─── SON ───', 'accent');
+      }
+      gap();
+      action('→ email kampanyası oluştur', () => doOutreach());
+      action('→ reklam görseli oluştur', () => doCreative());
+      checkDone('chkPitch');
+    } else {
+      write('pitch tamamlandı ama bir sorun oluştu.', 'yellow');
+      if (d.error) write(`  hata: ${d.error}`, 'red indent');
+    }
+  }).catch(e => {
+    officeSetWorking('pitch', false);
+    botState('', 0);
+    lineDelay = 0;
+    gap();
+    write(`pitch hatası: ${e.message}`, 'red');
+  });
+}
+
+// ─── Creative ───
+function doCreative() {
+  if (!CFG.fal_key) {
+    lineDelay = 0;
+    gap();
+    write('görsel oluşturmak için fal.ai API anahtarı gerekli.', 'yellow');
+    write('  → fal.ai hesabından key al: fal.ai', 'dim indent');
+    gap();
+    write('fal.ai key\'ini yaz:', 'accent');
+    onboardStep = 'fal_key';
+    document.getElementById('input').placeholder = 'fal.ai api key...';
+    return;
+  }
+
+  sel = 'pitch';
+  lineDelay = 0;
+  gap();
+  write('görsel motoru aktif. reklam görseli oluşturuluyor...', 'accent');
+  botState('think');
+  botStat.textContent = 'görsel';
+  officeSetWorking('pitch', true);
+
+  const businessType = CFG.niche || 'küçük işletmeler';
+  fetch('/api/creative', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({business_type: businessType, type: 'ad'})
+  }).then(r => r.json()).then(d => {
+    officeSetWorking('pitch', false);
+    botState('success', 2500);
+    lineDelay = 0;
+    gap();
+
+    if (d.status === 'ok' && d.path) {
+      write('reklam görseli oluşturuldu.', 'green');
+      write(`  dosya: ${d.path}`, 'dim indent');
+      gap();
+      write('görsel hazır. teklife eklenebilir veya sosyal medyada kullanılabilir.', 'dim');
+      checkDone('chkFal');
+    } else {
+      write('görsel oluşturulamadı.', 'yellow');
+      if (d.error) write(`  hata: ${d.error}`, 'red indent');
+    }
+  }).catch(e => {
+    officeSetWorking('pitch', false);
+    botState('', 0);
+    lineDelay = 0;
+    gap();
+    write(`görsel hatası: ${e.message}`, 'red');
+  });
+}
+
+// ─── Help ───
+function showHelp() {
+  lineDelay = 0;
+  gap();
+  write('━━ KOMUTLAR ━━', 'bright');
+  gap();
+  write('  ara / scout       müşteri adaylarını bul', 'accent');
+  write('  puanla / filter   leadleri puanla', 'yellow');
+  write('  leadler / tablo   lead tablosu göster', 'blue');
+  write('  email / ulaş      email kampanyası oluştur', 'green');
+  write('  teklif / pitch    müşteriye teklif hazırla', 'green');
+  write('  görsel / reklam   fal.ai ile görsel oluştur', 'dim');
+  write('  ayarlar           ajans ayarları', 'dim');
+  write('  temizle           ekranı temizle', 'dim');
+  write('  sıfırla           her şeyi sıfırla', 'dim');
+  write('  yardım            bu listeyi göster', 'dim');
+  gap();
+  write('━━ KISAYOLLAR ━━', 'bright');
+  write('  1 = scout  2 = filter  3 = outreach  4 = pitch  / = yaz', 'accent');
+  gap();
+  write('herhangi bir şey yaz — mentor sana cevap verir.', 'dim');
+}
+
+// ─── Checklist ───
+function checkDone(id) {
+  const el = document.getElementById(id);
+  if (el && !el.classList.contains('done')) {
+    el.classList.add('done');
+    el.querySelector('.chk').textContent = '●';
+  }
+}
+
+// Init checklist from current state
+if (CFG.agency_name) checkDone('chkSetup');
+if (CFG.apify_token) checkDone('chkApify');
+if (CFG.instantly_api_key) checkDone('chkInstantly');
+if (CFG.fal_key) checkDone('chkFal');
+// Check agent results from backend
+fetch('/api/agent/scout/result').then(r=>r.json()).then(d=>{ if(d.status!=='not_run') checkDone('chkScout'); });
+fetch('/api/agent/filter/result').then(r=>r.json()).then(d=>{ if(d.status!=='not_run') checkDone('chkFilter'); });
+fetch('/api/agent/outreach/result').then(r=>r.json()).then(d=>{ if(d.status!=='not_run' && d.result?.status==='ok') checkDone('chkOutreach'); });
+fetch('/api/agent/pitch/result').then(r=>r.json()).then(d=>{ if(d.status!=='not_run') checkDone('chkPitch'); });
+
+// Hook into existing functions to update office
+const _origAgentOn = agentOn;
+agentOn = function(id) {
+  _origAgentOn(id);
+  officeAddAgent(id);
+  if (id === 'scout') checkDone('chkScout');
+  if (id === 'filter') checkDone('chkFilter');
+  if (id === 'outreach') checkDone('chkOutreach');
+  if (id === 'pitch') checkDone('chkPitch');
+};
+
+const _origBotState2 = botState;
+botState = function(state, dur) {
+  _origBotState2(state, dur);
+  if (state === 'think') {
+    officeSetWorking(sel, true);
+  } else {
+    officeSetWorking(sel, false);
+  }
+};
+
+// Show sign when agency is configured
+if (CFG.agency_name) {
+  office.sign = CFG.agency_name;
+}
+
+// Hook saveSetup to show sign
+const _origSaveSetup = saveSetup;
+saveSetup = function() {
+  _origSaveSetup();
+  setTimeout(() => { office.sign = CFG.agency_name; }, 500);
+};
+
+// ─── Keyboard Shortcuts ───
+document.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
+  if (e.key === '/') { e.preventDefault(); document.getElementById('input').focus(); }
+  if (e.key === '1') { e.preventDefault(); doScout(); }
+  if (e.key === '2') { e.preventDefault(); doFilter(); }
+  if (e.key === '3') { e.preventDefault(); doOutreach(); }
+  if (e.key === '4') { e.preventDefault(); doPitch(); }
+  if (e.key === '?') { e.preventDefault(); showHelp(); }
+});
+
+// ─── LAUNCH ───
+runBootSequence();
+</script>
+</body>
+</html>

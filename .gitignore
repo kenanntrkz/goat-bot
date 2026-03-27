@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+data/leads/raw/*
+data/leads/qualified/*
+data/campaigns/*
+data/proposals/*
+outputs/reports/*
+data/config/user_profile.json
+!data/**/.gitkeep
+.DS_Store
