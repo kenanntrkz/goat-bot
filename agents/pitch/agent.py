@@ -406,6 +406,53 @@ Tarih: {today} | Hazırlayan: {owner}
 📧 {owner} | {agency}
 """
 
+    def run_batch(self) -> list:
+        """
+        Generate proposals for ALL hot leads.
+        Returns list of {lead_data, lead, proposal, web_audit} dicts.
+        Used by GoatAgent for the full automated pipeline.
+        """
+        config = self.load_config()
+        hot_leads = self._load_hot_leads()
+        agency = config.get("agency_name", "goat Agency")
+        owner = config.get("owner_name", "")
+        niche = config.get("niche", "")
+
+        pitched = []
+        for lead_data in hot_leads:
+            lead = lead_data.get("lead", {})
+            if not lead.get("email"):
+                continue  # skip — can't email without address
+
+            web_audit = lead.get("website_audit")
+            if web_audit is None and lead.get("website"):
+                from services.website_analyzer import analyze_website
+                web_audit = analyze_website(lead["website"])
+            elif web_audit is None:
+                web_audit = {"exists": False, "issues": [], "strengths": [], "summary": "Web sitesi yok."}
+
+            self.log(f"Teklif: {lead.get('name', '?')}")
+            proposal = self._generate_proposal(agency, owner, niche, lead, web_audit)
+
+            # Save proposal file
+            slug = lead.get("name", "lead").lower().replace(" ", "_")[:30]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            proposal_path = DATA_DIR / "proposals" / f"{slug}_{timestamp}.md"
+            proposal_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(proposal_path, "w", encoding="utf-8") as f:
+                f.write(proposal)
+
+            pitched.append({
+                "lead_data": lead_data,
+                "lead": lead,
+                "proposal": proposal,
+                "web_audit": web_audit,
+                "proposal_path": str(proposal_path),
+            })
+
+        self.log(f"Toplu teklif tamamlandı: {len(pitched)} lead")
+        return pitched
+
     def _load_hot_leads(self):
         """Load hot leads from latest qualified file."""
         qual_dir = DATA_DIR / "leads" / "qualified"

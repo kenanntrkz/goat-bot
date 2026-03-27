@@ -85,3 +85,36 @@ def list_campaigns(api_key=None):
         return []
     except Exception:
         return []
+
+
+def pause_active_campaigns() -> int:
+    """Pause all currently active campaigns. Returns count paused."""
+    campaigns = list_campaigns()
+    paused = 0
+    for c in campaigns:
+        if c.get("status") == "active":
+            try:
+                resp = requests.post(
+                    f"{_base_url()}/api/campaigns/{c['id']}/toggle",
+                    headers=_headers(),
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    paused += 1
+            except Exception:
+                pass
+    return paused
+
+
+def send_email(to: str, subject: str, body: str) -> bool:
+    """Send a single email via outreach /api/send-email endpoint."""
+    try:
+        resp = requests.post(
+            f"{_base_url()}/api/send-email",
+            headers=_headers(),
+            json={"to": to, "subject": subject, "body": body},
+            timeout=30,
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False

@@ -13,6 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 load_dotenv()
 
@@ -22,6 +24,7 @@ from agents import AGENTS, CATEGORIES
 
 app = FastAPI(title="goat — Agency-in-a-Box")
 BASE_DIR = Path(__file__).parent
+scheduler = BackgroundScheduler(timezone="Europe/Istanbul")
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -36,6 +39,69 @@ AGENT_MODULES = {
 }
 
 AGENT_RESULTS = {}
+
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+
+def _run_auto_pipeline():
+    """Background job: full goat pipeline."""
+    try:
+        agent = get_agent_instance("goat")
+        result = agent.run()
+        AGENT_RESULTS["goat"] = {
+            "result": result,
+            "timestamp": datetime.now().isoformat(),
+            "status": "auto",
+        }
+    except Exception as e:
+        AGENT_RESULTS["goat"] = {
+            "result": {"error": str(e)},
+            "timestamp": datetime.now().isoformat(),
+            "status": "error",
+        }
+
+
+def _setup_scheduler():
+    """Read config and (re)schedule daily pipeline job."""
+    cfg = load_config()
+    scheduler.remove_all_jobs()
+    if not cfg.get("auto_run_enabled"):
+        return
+    time_str = cfg.get("auto_run_time", "09:00")
+    try:
+        hour, minute = time_str.split(":")
+        scheduler.add_job(
+            _run_auto_pipeline,
+            CronTrigger(hour=int(hour), minute=int(minute)),
+            id="daily_pipeline",
+            replace_existing=True,
+        )
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+async def startup_event():
+    scheduler.start()
+    _setup_scheduler()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown(wait=False)
+
+
+# ── Scheduler status endpoint ──────────────────────────────────────────────────
+
+@app.get("/api/scheduler/status")
+async def scheduler_status():
+    cfg = load_config()
+    job = scheduler.get_job("daily_pipeline")
+    return JSONResponse({
+        "enabled": cfg.get("auto_run_enabled", False),
+        "time": cfg.get("auto_run_time", "09:00"),
+        "next_run": str(job.next_run_time) if job else None,
+    })
 
 
 def get_agent_instance(agent_id: str):
@@ -144,7 +210,7 @@ async def run_agent(agent_id: str, request: Request):
 
 @app.post("/api/agents/run-pipeline")
 async def run_pipeline():
-    """Run the full pipeline: Scout → Filter."""
+    """Run the full pipeline: Scout → Filter → Pitch → Outreach."""
     agent = get_agent_instance("goat")
     result = agent.run()
     AGENT_RESULTS["goat"] = {
@@ -153,6 +219,15 @@ async def run_pipeline():
         "status": "success",
     }
     return JSONResponse({"status": "ok", "result": result})
+
+
+@app.post("/api/auto-run")
+async def trigger_auto_run():
+    """Manually trigger the full automated pipeline (same as scheduled job)."""
+    import threading
+    t = threading.Thread(target=_run_auto_pipeline, daemon=True)
+    t.start()
+    return JSONResponse({"status": "started", "message": "Pipeline arka planda çalışıyor"})
 
 
 @app.get("/api/agent/{agent_id}/result")
@@ -275,6 +350,7 @@ async def save_config(request: Request):
     config_path = config_dir / "user_profile.json"
     with open(config_path, "w") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)
+    _setup_scheduler()  # apply new auto_run_time / auto_run_enabled immediately
     return JSONResponse({"status": "saved"})
 
 

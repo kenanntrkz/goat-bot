@@ -11,7 +11,7 @@ from pathlib import Path
 from agents.base import BaseAgent, DATA_DIR
 from services.outreach import (
     get_api_key, test_connection, create_campaign,
-    import_leads, list_campaigns,
+    import_leads, list_campaigns, pause_active_campaigns, send_email,
 )
 
 
@@ -165,6 +165,82 @@ class OutreachAgent(BaseAgent):
         self.save_output("outreach_campaign_report.json", results)
         self.log("Kampanya raporu kaydedildi.")
         return results
+
+    def send_personalized_all(self, pitched_leads: list, agency: str, owner: str) -> dict:
+        """
+        Full auto-outreach:
+        1. Pause all active campaigns
+        2. For each pitched lead with email → send personalized cold email
+        Returns summary dict.
+        """
+        self.log("Aktif kampanyalar durduruluyor...")
+        paused = pause_active_campaigns()
+        self.log(f"{paused} kampanya durduruldu.")
+
+        sent = 0
+        failed = 0
+        for item in pitched_leads:
+            lead = item.get("lead", {})
+            email = lead.get("email", "")
+            if not email:
+                continue
+
+            web_audit = item.get("web_audit", {})
+            subject, body = self._build_cold_email(lead, agency, owner, web_audit)
+
+            self.log(f"Email gönderiliyor: {email} ({lead.get('name', '?')})")
+            ok = send_email(email, subject, body)
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+
+        self.log(f"Gönderim tamamlandı: {sent} başarılı, {failed} başarısız.")
+        return {"paused_campaigns": paused, "sent": sent, "failed": failed}
+
+    def _build_cold_email(self, lead: dict, agency: str, owner: str, web_audit: dict) -> tuple:
+        """Generate a short personalized cold email. Uses Claude if available."""
+        lead_name = lead.get("name", "İşletme")
+        rating = lead.get("rating", 0)
+        reviews = lead.get("review_count", 0)
+
+        issues = (web_audit or {}).get("issues", [])[:2]
+        if not issues and not lead.get("website"):
+            issues = ["Web siteniz yok — müşteriler sizi Google'da bulamıyor"]
+
+        issue_lines = "\n".join(f"• {i}" for i in issues) if issues else "• Dijital süreçlerde iyileştirme fırsatı var"
+
+        # Try Claude for a more natural tone
+        prompt = f"""Kısa, samimi bir soğuk satış emaili yaz. Türkçe. 150 kelime max.
+
+İşletme: {lead_name}
+Google: {rating}/5 puan, {reviews} yorum
+Tespit edilen sorunlar:
+{issue_lines}
+
+Ajans: {agency} | Kurucu: {owner}
+
+Sadece düz metin, imza dahil. Konu satırını ilk satıra yaz."""
+
+        response = self.call_claude(prompt, timeout=20)
+        if response and "\n" in response:
+            lines = response.strip().split("\n", 1)
+            subject = lines[0].strip().lstrip("Konu:").lstrip("Subject:").strip()
+            body = lines[1].strip() if len(lines) > 1 else response
+            return subject, body
+
+        # Fallback template
+        subject = f"{lead_name} — {agency} dijital analiz"
+        body = (
+            f"Merhaba,\n\n"
+            f"{lead_name} işletmesini inceledim. Google'da {reviews} yorum ve {rating}/5 puanınız var.\n\n"
+            f"Kısa bir analiz yaptım:\n{issue_lines}\n\n"
+            f"{agency} olarak bu sorunları otomasyonla çözüyoruz. "
+            f"İlk ay %50 indirimli pilot teklifimiz var.\n\n"
+            f"15 dakikalık ücretsiz görüşme için yanıtlayın.\n\n"
+            f"{owner}\n{agency}"
+        )
+        return subject, body
 
     def _load_hot_leads(self) -> list:
         """Load hot leads from latest qualified file."""

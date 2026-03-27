@@ -2,10 +2,11 @@
 
 Scrapes Google Maps via Apify to find potential clients
 for the user's automation agency.
+Supports multi-niche × multi-city with daily lead limit.
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from agents.base import BaseAgent, DATA_DIR
@@ -20,30 +21,53 @@ class ScoutAgent(BaseAgent):
     role = "Finds potential clients via Google Maps / Apify"
     category = "acquisition"
 
-    def run(self, query: str = "", location: str = "", limit: int = 50) -> dict:
+    def run(self, query: str = "", location: str = "", limit: int = 0) -> dict:
         config = self.load_config()
+        daily_limit = limit or config.get("daily_lead_limit", 30)
 
-        # Use provided params or fall back to user_profile config
-        if not query:
-            industries = config.get("target_industries", [])
-            query = industries[0] if industries else "restaurants"
-        if not location:
-            cities = config.get("target_cities", [])
-            location = cities[0] if cities else ""
+        # Build niche-city pairs
+        if query:
+            # Manual single-query run
+            pairs = [(query, location or "")]
+        else:
+            industries = config.get("target_industries", []) or ["restaurants"]
+            cities = config.get("target_cities", []) or [""]
+            pairs = [(n, c) for n in industries for c in cities]
 
-        self.log(f"Searching for '{query}' in '{location}' (limit: {limit})...")
+        # Rotate starting pair daily so each day hits a different niche/city first
+        start = date.today().toordinal() % len(pairs)
+        pairs = pairs[start:] + pairs[:start]
 
-        leads = scrape_google_maps(
-            query=query,
-            location=location,
-            max_results=limit,
-            log=self.log,
-        )
+        all_leads = []
+        seen_keys: set = set()
 
-        # Enrich leads — find emails from websites
+        for niche, city in pairs:
+            remaining = daily_limit - len(all_leads)
+            if remaining <= 0:
+                break
+
+            self.log(f"Aranıyor: '{niche}' / '{city}' (kalan: {remaining})...")
+            batch = scrape_google_maps(
+                query=niche,
+                location=city,
+                max_results=remaining * 2,  # fetch extra to account for dupes
+                log=self.log,
+            )
+
+            for lead in batch:
+                if len(all_leads) >= daily_limit:
+                    break
+                # Dedup by website URL, then by name+address
+                key = lead.get("website") or (lead.get("name", "") + "|" + lead.get("address", ""))
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                all_leads.append(lead)
+
+        leads = all_leads
+
+        # Enrich — emails + website audits in parallel
         leads = enrich_leads_with_emails(leads, log=self.log)
-
-        # Enrich leads — audit websites in parallel (cached into lead data for Pitch)
         leads = enrich_leads_with_audits(leads, log=self.log)
 
         if not leads:
@@ -66,11 +90,12 @@ class ScoutAgent(BaseAgent):
 
         # Save raw results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = query.lower().replace(" ", "_")[:30]
+        niches_label = query or "+".join(config.get("target_industries", []))[:30]
+        slug = niches_label.lower().replace(" ", "_")[:30]
         filename = f"leads/raw/{timestamp}_{slug}.json"
         self.save_data(filename, {
-            "query": query,
-            "location": location,
+            "query": niches_label,
+            "location": location or ", ".join(config.get("target_cities", [])),
             "scraped_at": datetime.now().isoformat(),
             "count": len(leads),
             "leads": leads,
@@ -84,18 +109,21 @@ class ScoutAgent(BaseAgent):
         with_website = sum(1 for l in leads if l.get("website"))
         with_phone = sum(1 for l in leads if l.get("phone"))
         avg_rating = sum(l.get("rating", 0) for l in leads) / len(leads) if leads else 0
+        niches_used = query or ", ".join(config.get("target_industries", []))
+        cities_used = location or ", ".join(config.get("target_cities", []))
 
         results = {
             "status": "ok",
-            "summary": f"Found {len(leads)} businesses for '{query}' in {location or 'all locations'}",
+            "summary": f"{len(leads)} işletme bulundu — {niches_used} / {cities_used or 'tüm şehirler'}",
             "metrics": {
                 "total_found": len(leads),
                 "with_email": with_email,
                 "with_website": with_website,
                 "with_phone": with_phone,
                 "avg_rating": round(avg_rating, 1),
-                "query": query,
-                "location": location,
+                "niches": niches_used,
+                "cities": cities_used,
+                "daily_limit": daily_limit,
                 "scraped_at": datetime.now().isoformat(),
             },
             "leads": clean_leads[:20],  # Top 20 in report
