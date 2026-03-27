@@ -818,7 +818,7 @@ body::before {
       <div class="check-item" id="chkApify"><span class="chk">○</span> apify token</div>
       <div class="check-item" id="chkScout"><span class="chk">○</span> lead taraması</div>
       <div class="check-item" id="chkFilter"><span class="chk">○</span> lead puanlama</div>
-      <div class="check-item" id="chkInstantly"><span class="chk">○</span> instantly.ai</div>
+      <div class="check-item" id="chkInstantly"><span class="chk">○</span> outreach sistemi</div>
       <div class="check-item" id="chkFal"><span class="chk">○</span> fal.ai</div>
       <div class="check-item" id="chkOutreach"><span class="chk">○</span> ilk kampanya</div>
       <div class="check-item" id="chkPitch"><span class="chk">○</span> ilk teklif</div>
@@ -904,7 +904,7 @@ const BOOT_LINES = [
   { text: 'Servisler yükleniyor...', cls: '', delay: 80 },
   { text: '  Apify tarayıcı ....... HAZIR', cls: '', delay: 70 },
   { text: '  fal.ai görsel ........ HAZIR', cls: '', delay: 70 },
-  { text: '  Instantly.ai email ... BEKLEMEDE', cls: '', delay: 70 },
+  { text: '  Outreach sistemi ..... HAZIR', cls: '', delay: 70 },
   { text: '', cls: '', delay: 60 },
   { text: 'Kontrol paneli :7778 üzerinde aktif', cls: '', delay: 90 },
   { text: 'Tüm sistemler çalışıyor.', cls: 'green', delay: 200 },
@@ -1274,18 +1274,6 @@ function doFilter() {
 }
 
 function doOutreach() {
-  if (!CFG.instantly_api_key) {
-    lineDelay = 0;
-    gap();
-    write('outreach için instantly.ai API anahtarı gerekli.', 'yellow');
-    write('  → instantly.ai hesabından API key al: app.instantly.ai/settings', 'dim indent');
-    gap();
-    write('instantly API key\'ini yaz:', 'accent');
-    onboardStep = 'instantly_key';
-    document.getElementById('input').placeholder = 'instantly api key...';
-    return;
-  }
-
   sel = 'outreach';
   lineDelay = 0;
   gap();
@@ -1310,12 +1298,12 @@ function doOutreach() {
       if (d.result.summary) write(`  ${d.result.summary}`, 'dim indent');
       if (d.result.metrics) {
         if (d.result.metrics.campaign_id) write(`  kampanya ID: ${d.result.metrics.campaign_id}`, 'dim indent');
-        if (d.result.metrics.leads_added) write(`  lead eklendi: ${d.result.metrics.leads_added}`, 'green indent');
+        if (d.result.metrics.leads_imported) write(`  lead eklendi: ${d.result.metrics.leads_imported}`, 'green indent');
         if (d.result.metrics.email_steps) write(`  email adımları: ${d.result.metrics.email_steps}`, 'dim indent');
       }
       gap();
       write('kampanya TASLAK olarak kaydedildi.', 'yellow');
-      write('  → instantly.ai panelinden aktif edebilirsin.', 'dim indent');
+      write('  → outreach.kenanturkoz.cloud adresinden yönetebilirsin.', 'dim indent');
       gap();
       action('→ teklif hazırla', () => doPitch());
       document.getElementById('headerSub').textContent = 'kampanya hazır';
@@ -1492,26 +1480,6 @@ function handleInput() {
         el.placeholder = 'bir şey yaz...';
         postSetupSequence();
       }, 1600);
-      return;
-    }
-    if (onboardStep === 'instantly_key') {
-      if (msg.toLowerCase() !== 'atla' && msg.toLowerCase() !== 'skip') {
-        CFG.instantly_api_key = msg;
-        const config = Object.assign({}, CFG, {instantly_api_key: msg});
-        fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(config)});
-        checkDone('chkInstantly');
-        gap();
-        write('instantly.ai bağlandı.', 'green', 200);
-        gap();
-        write('şimdi kampanya oluşturabilirsin.', 'dim', 400);
-        gap();
-        action('→ email kampanyası oluştur', () => doOutreach(), 600);
-      } else {
-        gap();
-        write('instantly.ai atlandı. daha sonra ayarlayabilirsin.', 'dim', 200);
-      }
-      onboardStep = null;
-      el.placeholder = 'bir şey yaz...';
       return;
     }
     if (onboardStep === 'fal_key') {
@@ -2242,7 +2210,7 @@ function checkDone(id) {
 // Init checklist from current state
 if (CFG.agency_name) checkDone('chkSetup');
 if (CFG.apify_token) checkDone('chkApify');
-if (CFG.instantly_api_key) checkDone('chkInstantly');
+checkDone('chkInstantly'); // Outreach sistemi sunucu tarafında yapılandırılmış
 if (CFG.fal_key) checkDone('chkFal');
 // Check agent results from backend
 fetch('/api/agent/scout/result').then(r=>r.json()).then(d=>{ if(d.status!=='not_run') checkDone('chkScout'); });
