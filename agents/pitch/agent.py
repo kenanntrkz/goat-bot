@@ -19,11 +19,15 @@ class PitchAgent(BaseAgent):
     role = "Generates service proposals and pitch decks"
     category = "sales"
 
-    def run(self, lead_index=0) -> dict:
+    def run(self, lead_index: int = -1) -> dict:
+        """
+        Run pitch for all hot leads (default) or a specific one (lead_index >= 0).
+        Returns a summary with all generated proposals.
+        """
         config = self.load_config()
-        leads = self._load_hot_leads()
+        all_leads = self._load_hot_leads()
 
-        if not leads:
+        if not all_leads:
             return {
                 "status": "error",
                 "summary": "Sıcak lead yok. Önce Scout ve Filter çalıştır.",
@@ -31,68 +35,78 @@ class PitchAgent(BaseAgent):
                 "recommendations": ["Önce lead bul ve puanla"],
             }
 
-        # Pick the lead
-        if lead_index >= len(leads):
-            lead_index = 0
-        lead_data = leads[lead_index]
-        lead = lead_data.get("lead", {})
-
-        self.log(f"Teklif hazırlanıyor: {lead.get('name', '?')}")
+        # Single lead mode (legacy / explicit index)
+        if lead_index >= 0:
+            leads_to_process = [all_leads[min(lead_index, len(all_leads) - 1)]]
+        else:
+            leads_to_process = all_leads
 
         agency = config.get("agency_name", "goat Agency")
         owner = config.get("owner_name", "")
         niche = config.get("niche", "")
 
-        # Use pre-computed website audit from Scout (no extra HTTP call needed)
-        web_audit = lead.get("website_audit")
-        if web_audit:
-            self.log(f"Site analizi (Scout'tan): {web_audit.get('summary', '?')}")
-        elif lead.get("website"):
-            # Fallback: Scout didn't audit yet (e.g. cached lead) — do it now
-            self.log(f"Site analizi yapılıyor (Scout verisi yok): {lead['website']}")
-            web_audit = analyze_website(lead["website"])
-            self.log(f"Site analizi: {web_audit['summary']}")
-        else:
-            self.log("Web sitesi yok — teklife site kurulum önerisi eklenecek")
-            web_audit = {"exists": False, "issues": [], "strengths": [], "summary": "Web sitesi yok."}
+        proposals_generated = []
 
-        # Generate proposal text via Claude
-        proposal = self._generate_proposal(agency, owner, niche, lead, web_audit)
+        for lead_data in leads_to_process:
+            lead = lead_data.get("lead", {})
+            self.log(f"Teklif hazırlanıyor: {lead.get('name', '?')}")
 
-        # Generate cover image via fal.ai
-        self.log("Kapak görseli oluşturuluyor...")
-        cover_path = generate_proposal_cover(agency, lead.get("name", ""), lead.get("category", niche))
-        if cover_path:
-            self.log(f"Kapak görseli: {cover_path}")
+            # Website audit — prefer Scout's cached result
+            web_audit = lead.get("website_audit")
+            if not web_audit and lead.get("website"):
+                self.log(f"Site analizi yapılıyor: {lead['website']}")
+                web_audit = analyze_website(lead["website"])
+            elif not web_audit:
+                web_audit = {"exists": False, "issues": [], "strengths": [],
+                             "summary": "Web sitesi yok."}
 
-        # Save proposal
-        slug = lead.get("name", "lead").lower().replace(" ", "_")[:30]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        proposal_path = DATA_DIR / "proposals" / f"{slug}_{timestamp}.md"
-        proposal_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(proposal_path, "w", encoding="utf-8") as f:
-            f.write(proposal)
-        self.log(f"Teklif kaydedildi: {proposal_path}")
+            proposal = self._generate_proposal(agency, owner, niche, lead, web_audit)
 
-        results = {
-            "status": "ok",
-            "summary": f"Teklif hazır: {lead.get('name', '?')} için {agency} proposal",
-            "metrics": {
+            # Save proposal file
+            slug = lead.get("name", "lead").lower().replace(" ", "_")[:30]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            proposal_path = DATA_DIR / "proposals" / f"{slug}_{timestamp}.md"
+            proposal_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(proposal_path, "w", encoding="utf-8") as f:
+                f.write(proposal)
+
+            proposals_generated.append({
                 "lead_name": lead.get("name", "?"),
                 "lead_email": lead.get("email", "—"),
                 "lead_category": lead.get("category", "—"),
                 "lead_score": lead_data.get("score", 0),
-                "proposal_path": str(proposal_path),
-                "cover_image": cover_path,
                 "website_audit": web_audit.get("summary", ""),
-                "website_issues": len(web_audit.get("issues", [])),
+                "proposal_path": str(proposal_path),
+                # Full proposal only in single-lead mode to keep response size sane
+                "proposal": proposal if lead_index >= 0 or len(leads_to_process) == 1 else None,
+            })
+
+        # First proposal as preview
+        preview = ""
+        if proposals_generated:
+            first_path = proposals_generated[0]["proposal_path"]
+            try:
+                with open(first_path, encoding="utf-8") as f:
+                    preview = f.read()
+            except Exception:
+                pass
+
+        results = {
+            "status": "ok",
+            "summary": f"{len(proposals_generated)} teklif hazırlandı ({agency})",
+            "metrics": {
+                "total_pitched": len(proposals_generated),
+                "total_hot": len(all_leads),
+                "agency": agency,
             },
-            "proposal": proposal,
+            "proposals": proposals_generated,
+            # Dashboard preview: first proposal
+            "proposal": preview,
+            "lead": proposals_generated[0] if proposals_generated else {},
             "recommendations": [
-                "Teklifi incele ve düzenle",
-                f"Email: {lead.get('email', '—')}",
-                f"Telefon: {lead.get('phone', '—')}",
-                "Teklifi göndermeye hazırsan outreach kullan",
+                f"{len(proposals_generated)} teklif data/proposals/ klasörüne kaydedildi",
+                "Outreach agent ile email gönderimine geç",
+                "Teklifleri tarayıcıda görmek için goat.kenanturkoz.cloud/api/leads/qualified",
             ],
         }
 
