@@ -10,6 +10,7 @@ from pathlib import Path
 
 from agents.base import BaseAgent, DATA_DIR
 from services.image import generate_proposal_cover
+from services.website_analyzer import analyze_website
 
 
 class PitchAgent(BaseAgent):
@@ -42,8 +43,17 @@ class PitchAgent(BaseAgent):
         owner = config.get("owner_name", "")
         niche = config.get("niche", "")
 
+        # Website audit
+        website = lead.get("website", "")
+        if website:
+            self.log(f"Web sitesi analiz ediliyor: {website}")
+        else:
+            self.log("Web sitesi yok — teklife site kurulum önerisi eklenecek")
+        web_audit = analyze_website(website)
+        self.log(f"Site analizi: {web_audit['summary']}")
+
         # Generate proposal text via Claude
-        proposal = self._generate_proposal(agency, owner, niche, lead)
+        proposal = self._generate_proposal(agency, owner, niche, lead, web_audit)
 
         # Generate cover image via fal.ai
         self.log("Kapak görseli oluşturuluyor...")
@@ -70,6 +80,8 @@ class PitchAgent(BaseAgent):
                 "lead_score": lead_data.get("score", 0),
                 "proposal_path": str(proposal_path),
                 "cover_image": cover_path,
+                "website_audit": web_audit.get("summary", ""),
+                "website_issues": len(web_audit.get("issues", [])),
             },
             "proposal": proposal,
             "recommendations": [
@@ -83,13 +95,30 @@ class PitchAgent(BaseAgent):
         self.save_output("pitch_proposal_report.json", results)
         return results
 
-    def _generate_proposal(self, agency, owner, niche, lead):
+    def _generate_proposal(self, agency, owner, niche, lead, web_audit=None):
         """Generate proposal markdown via Claude or template."""
         lead_name = lead.get("name", "İşletme")
         lead_category = lead.get("category", niche)
         lead_rating = lead.get("rating", 0)
         lead_reviews = lead.get("review_count", 0)
         lead_address = lead.get("address", "")
+        lead_website = lead.get("website", "")
+
+        # Build website context block for the prompt
+        if not lead_website:
+            web_context = "Web Sitesi: YOK — tekliffe web sitesi tasarım ve kurulum hizmeti mutlaka öner."
+        elif not web_audit or not web_audit.get("exists"):
+            web_context = f"Web Sitesi: {lead_website} (ulaşılamadı veya analiz edilemedi)"
+        else:
+            issues = web_audit.get("issues", [])
+            strengths = web_audit.get("strengths", [])
+            issues_text = "\n".join(f"  - {i}" for i in issues) if issues else "  (tespit edilmedi)"
+            strengths_text = "\n".join(f"  + {s}" for s in strengths) if strengths else "  (tespit edilmedi)"
+            web_context = f"""Web Sitesi: {lead_website}
+Eksiklikler (bunları tekliffe somut çözüm olarak yansıt):
+{issues_text}
+Güçlü Noktalar:
+{strengths_text}"""
 
         prompt = f"""Bir otomasyon ajansı için profesyonel iş teklifi yaz. Markdown formatında, Türkçe.
 
@@ -99,28 +128,29 @@ Müşteri: {lead_name}
 Sektör: {lead_category}
 Adres: {lead_address}
 Google Puanı: {lead_rating}/5 ({lead_reviews} yorum)
+{web_context}
 
 Teklif şunları içersin:
 1. Kapak (ajans adı, müşteri adı, tarih)
 2. Yönetici Özeti (1 paragraf — ne sunuyoruz, neden)
-3. Mevcut Durum Analizi (müşterinin muhtemel sorunları)
-4. Çözüm Önerisi (3 paket halinde)
-5. Fiyatlandırma (Başlangıç $300/ay, Pro $500/ay, Kurumsal $1000/ay)
-6. Zaman Çizelgesi (4 haftalık)
-7. Neden Biz (kısa)
-8. Sonraki Adımlar
+3. Mevcut Durum Analizi — web sitesi eksikliklerini somut verilerle göster, site yoksa bunu özellikle vurgula
+4. Çözüm Önerisi (3 paket — Temel/Profesyonel/Kurumsal, ₺ fiyatlar kullan)
+5. Zaman Çizelgesi (4 haftalık)
+6. Neden Biz (kısa)
+7. Sonraki Adımlar
 
-Profesyonel, samimi, somut ol. Gereksiz şeyler yazma."""
+Önemli: Web sitesi bulgularını "Mevcut Durum" bölümüne mutlaka yansıt. Site yoksa web sitesi kurulumunu en yüksek öncelikli çözüm olarak sun.
+Profesyonel, samimi, somut ol."""
 
-        response = self.call_claude(prompt, timeout=45)
+        response = self.call_claude(prompt, timeout=60)
         if response:
             return response
 
-        # Smart fallback template — category-aware
+        # Smart fallback template — category-aware + website audit
         return self._build_template(agency, owner, lead_name, lead_category,
-                                    lead_rating, lead_reviews, lead_address)
+                                    lead_rating, lead_reviews, lead_address, web_audit)
 
-    def _build_template(self, agency, owner, lead_name, category, rating, reviews, address):
+    def _build_template(self, agency, owner, lead_name, category, rating, reviews, address, web_audit=None):
         """Category-aware proposal template."""
         today = datetime.now().strftime("%d.%m.%Y")
         cat = (category or "").lower()
@@ -281,6 +311,28 @@ Profesyonel, samimi, somut ol. Gereksiz şeyler yazma."""
             why = f"{lead_name} büyüklüğündeki işletmeler için özelleştirilmiş otomasyon çözümleri sunuyoruz."
             quick_win = "İlk 30 günde: en az 1 tam otomasyon canlıya alınır, sonuçlar ölçülür"
 
+        # Inject website audit findings
+        web_section = ""
+        if web_audit and web_audit.get("url"):
+            # Website exists — show issues
+            issues = web_audit.get("issues", [])
+            if issues:
+                pain_points.insert(0, f"Web sitesinde {len(issues)} kritik eksiklik var ({web_audit['url']})")
+                web_section = (
+                    "\n### Web Sitesi Denetimi\n"
+                    + "".join(f"- {i}\n" for i in issues[:6])
+                    + "\n> Web sitesi sorunları doğrudan müşteri kaybına yol açıyor.\n"
+                )
+        else:
+            # No website at all
+            pain_points.insert(0, "Web sitesi yok — rakipler Google aramasında sizi geride bırakıyor")
+            web_section = (
+                "\n### Web Sitesi Yok\n"
+                "- Potansiyel müşterilerin %70+ sizi Google'da arayıp bulamıyor\n"
+                "- Profesyonel bir web sitesi güven oluşturmanın 1. adımı\n"
+                "- **Çözüm:** Sektörünüze özel, mobil uyumlu, SEO optimizasyonlu site kuruyoruz\n"
+            )
+
         # Rating-based summary
         if rating >= 4.5:
             rep_comment = f"Google'da **{rating}/5** puanınız ve {reviews} yorumunuzla sektörün üst çeyreğindesiniz. Bu itibarı büyütmek ve korumak için sistem kuruyoruz."
@@ -313,7 +365,7 @@ Tarih: {today} | Hazırlayan: {owner}
 
 ## Mevcut Durum Analizi
 
-{"".join(f"→ {p}" + chr(10) for p in pain_points)}
+{"".join(f"→ {p}" + chr(10) for p in pain_points)}{web_section}
 ---
 
 ## Çözüm Paketlerimiz
