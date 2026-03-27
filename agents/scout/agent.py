@@ -10,6 +10,7 @@ from pathlib import Path
 
 from agents.base import BaseAgent, DATA_DIR
 from services.scraper import scrape_google_maps
+from services.email_finder import enrich_leads_with_emails
 
 
 class ScoutAgent(BaseAgent):
@@ -37,6 +38,9 @@ class ScoutAgent(BaseAgent):
             max_results=limit,
             log=self.log,
         )
+
+        # Enrich leads — find emails from websites
+        leads = enrich_leads_with_emails(leads, log=self.log)
 
         if not leads:
             # Check for cached data
